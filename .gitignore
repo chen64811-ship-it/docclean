@@ -1,0 +1,12 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+outputs/
+uploads/
+.env
+*.log
+_tmp_*.png
+*.tmp

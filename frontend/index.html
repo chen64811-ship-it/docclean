@@ -1,0 +1,2862 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>知识库 - 文档清洗与 Markdown 编辑</title>
+<link rel="icon" href="data:image/x-icon;base64,AA">
+<link rel="preconnect" href="https://fonts.googleapis.cn">
+<link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.bootcdn.net/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown@7.1.3/dist/turndown.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/simplemde-editor/1.11.2/easymde.min.js"></script>
+<link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/simplemde-editor/1.11.2/easymde.min.css">
+<style>
+/* ============================================================
+   全局
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; }
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #e8eaf2;
+    background-image: radial-gradient(circle at 15% 15%, rgba(102,126,234,0.06) 0%, transparent 50%),
+        radial-gradient(circle at 85% 85%, rgba(118,75,162,0.06) 0%, transparent 50%);
+    color: #333; display: flex; flex-direction: column; height: 100vh;
+    font-size: 14px; -webkit-font-smoothing: antialiased;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: rgba(102,126,234,0.35); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #667eea; }
+
+.btn {
+    padding: 5px 12px; border: none; border-radius: 8px;
+    font-size: 11px; cursor: pointer; font-weight: 600; font-family: inherit;
+    white-space: nowrap; transition: all 0.18s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0) scale(0.97); }
+.btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; box-shadow: 0 2px 8px rgba(102,126,234,0.3); }
+.btn-ghost { background: rgba(255,255,255,0.9); color: #555; border: 1px solid rgba(102,126,234,0.12); }
+.btn-ghost:hover { background: white; }
+.btn-danger { background: #fff0f0; color: #e53e3e; border: 1px solid rgba(229,62,62,0.15); }
+.btn-danger:hover { background: #ffe0e0; }
+.btn-sm { padding: 4px 10px; font-size: 10px; }
+.btn-xs { padding: 3px 8px; font-size: 10px; }
+
+/* ============================================================
+   顶栏
+   ============================================================ */
+.header {
+    height: 56px; flex-shrink: 0;
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(102,126,234,0.1);
+    display: flex; align-items: center; padding: 0 20px; gap: 12px; z-index: 100;
+}
+.header-icon { width: 30px; height: 30px; flex-shrink: 0; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.header-title h1 { font-size: 14px; font-weight: 700; color: #2d2d44; }
+.header-title p { font-size: 10px; color: #aaa; margin-top: 1px; }
+.header-center { flex: 1; display: flex; align-items: center; gap: 8px; justify-content: center; }
+.header-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+#headerProgress { display: none; align-items: center; gap: 8px; font-size: 11px; color: #667eea; font-weight: 600; }
+#headerProgress .dot { width: 6px; height: 6px; background: #667eea; border-radius: 50%; animation: pulse 1s infinite; }
+#headerProgress .bar { width: 120px; height: 4px; background: rgba(102,126,234,0.12); border-radius: 4px; overflow: hidden; }
+#headerProgress .bar-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; transition: width 0.4s ease; }
+
+/* 视图切换按钮组 */
+.view-switcher { display: flex; gap: 4px; background: rgba(255,255,255,0.6); border-radius: 10px; padding: 3px; border: 1px solid rgba(102,126,234,0.1); }
+.view-btn { padding: 4px 12px; border: none; border-radius: 7px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; color: #888; background: transparent; transition: all 0.15s ease; }
+.view-btn:hover { color: #667eea; }
+.view-btn.active { background: linear-gradient(135deg, #667eea, #764ba2); color: white; box-shadow: 0 2px 6px rgba(102,126,234,0.25); }
+
+/* ============================================================
+   主区域
+   ============================================================ */
+.main { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+
+/* 左侧文件列表 */
+.sidebar {
+    width: 300px; min-width: 260px; flex-shrink: 0;
+    background: rgba(255,255,255,0.82); backdrop-filter: blur(16px);
+    border-right: 1px solid rgba(102,126,234,0.1);
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.upload-zone { margin: 12px; flex-shrink: 0; border: 2px dashed rgba(102,126,234,0.28); border-radius: 12px; padding: 14px 12px; text-align: center; cursor: pointer; background: rgba(102,126,234,0.03); transition: all 0.25s ease; }
+.upload-zone:hover, .upload-zone.dragover { border-color: #667eea; background: rgba(102,126,234,0.07); transform: scale(1.01); }
+.upload-zone-icon { font-size: 22px; margin-bottom: 4px; }
+.upload-zone-text { font-size: 12px; font-weight: 600; color: #555; }
+.upload-zone-sub { font-size: 10px; color: #bbb; margin-top: 2px; }
+#fileInput { display: none; }
+.up-progress { margin-top: 10px; display: none; }
+.up-bar { height: 3px; background: rgba(102,126,234,0.1); border-radius: 3px; overflow: hidden; }
+.up-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width 0.25s ease; width: 0%; }
+.up-pct { font-size: 10px; color: #667eea; font-weight: 600; margin-top: 3px; text-align: center; }
+
+.list-header { display: flex; align-items: center; padding: 0 12px 8px; gap: 8px; flex-shrink: 0; }
+.list-header span { font-size: 11px; color: #aaa; font-weight: 600; flex: 1; }
+.file-list { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+.list-empty { text-align: center; padding: 40px 12px; color: #ccc; font-size: 12px; }
+
+/* 批量操作栏 */
+.batch-bar { display: none; flex-shrink: 0; padding: 8px 12px; background: linear-gradient(135deg, rgba(102,126,234,0.08), rgba(118,75,162,0.06)); border-top: 1px solid rgba(102,126,234,0.12); gap: 6px; align-items: center; }
+.batch-bar.show { display: flex; }
+.batch-bar .batch-info { font-size: 11px; color: #667eea; font-weight: 600; flex: 1; }
+.batch-bar .batch-btn { padding: 5px 12px; border: none; border-radius: 7px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.18s ease; }
+.batch-bar .batch-btn.export { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+.batch-bar .batch-btn.export:hover { box-shadow: 0 2px 8px rgba(102,126,234,0.3); transform: translateY(-1px); }
+.batch-bar .batch-btn.export:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+.batch-bar .batch-btn.del-batch { background: rgba(229,62,62,0.1); color: #e53e3e; }
+.batch-bar .batch-btn.del-batch:hover { background: rgba(229,62,62,0.2); }
+.batch-bar .batch-btn.cancel { background: rgba(0,0,0,0.05); color: #888; }
+.batch-bar .batch-btn.cancel:hover { background: rgba(0,0,0,0.1); }
+.batch-bar .batch-btn.select-all { background: rgba(102,126,234,0.1); color: #667eea; }
+.batch-bar .batch-btn.select-all:hover { background: rgba(102,126,234,0.18); }
+/* 全选checkbox */
+.batch-select-toggle { font-size: 11px; color: #667eea; cursor: pointer; font-weight: 600; user-select: none; }
+.batch-select-toggle:hover { text-decoration: underline; }
+/* 文件卡片checkbox */
+.card-checkbox { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; cursor: pointer; accent-color: #667eea; z-index: 2; display: none; }
+.batch-mode .card-checkbox { display: block; }
+.file-card { position: relative; }
+.file-card.checked { border-color: #667eea; background: rgba(102,126,234,0.04); }
+
+.file-card { background: rgba(255,255,255,0.85); border: 1.5px solid rgba(102,126,234,0.08); border-radius: 12px; margin-bottom: 8px; overflow: hidden; cursor: pointer; transition: all 0.2s ease; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.file-card:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(102,126,234,0.1); border-color: rgba(102,126,234,0.2); }
+.file-card.active { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+.file-card.active .card-top-bar { opacity: 1; }
+.card-top-bar { height: 3px; background: linear-gradient(90deg, #667eea, #764ba2); opacity: 0; transition: opacity 0.2s; }
+.card-body { padding: 10px 12px; }
+.card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.card-ext { flex-shrink: 0; font-size: 9px; font-weight: 700; background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 2px 6px; border-radius: 5px; }
+.card-name { flex: 1; font-size: 12px; font-weight: 600; color: #2d2d44; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-status { font-size: 10px; display: flex; align-items: center; gap: 4px; }
+.card-status .dot { width: 5px; height: 5px; border-radius: 50%; }
+.status-done .dot { background: #34a853; }
+.status-done .label { color: #34a853; }
+.status-parsing .dot { background: #f5a623; animation: pulse 1s infinite; }
+.status-parsing .label { color: #f5a623; }
+.status-error .dot { background: #e53e3e; }
+.status-error .label { color: #e53e3e; }
+@keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.4; } }
+.card-meta { font-size: 10px; color: #bbb; margin-bottom: 6px; }
+.card-parse-bar { height: 2px; background: rgba(102,126,234,0.1); border-radius: 2px; margin-bottom: 6px; overflow: hidden; display: none; }
+.card-parse-bar.show { display: block; }
+.card-parse-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 2px; transition: width 0.5s ease; width: 0%; }
+.card-actions { display: flex; gap: 5px; }
+.card-btn { flex: 1; padding: 4px 6px; border: 1px solid rgba(102,126,234,0.12); border-radius: 7px; background: rgba(255,255,255,0.8); font-size: 11px; cursor: pointer; color: #555; font-family: inherit; font-weight: 500; text-align: center; transition: all 0.18s ease; }
+.card-btn:hover { background: white; border-color: #667eea; color: #667eea; }
+.card-btn.edit { background: rgba(102,126,234,0.08); border-color: rgba(102,126,234,0.2); color: #667eea; }
+.card-btn.del { flex: 0; padding: 4px 8px; color: #e53e3e; border-color: rgba(229,62,62,0.12); }
+.card-btn.del:hover { background: #fff0f0; border-color: #e53e3e; }
+.card-btn:disabled { opacity: 0.45; cursor: default; pointer-events: none; }
+
+/* ============================================================
+   右侧内容区（编辑器/PDF视图共用）
+   ============================================================ */
+.content-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 14px 14px 14px 10px; min-height: 0; }
+
+/* 文档顶栏 */
+.doc-header {
+    height: 52px; flex-shrink: 0;
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(12px);
+    border-radius: 14px 14px 0 0;
+    border-bottom: 1px solid rgba(102,126,234,0.08);
+    display: flex; align-items: center; padding: 0 18px; gap: 12px;
+}
+.doc-title { flex: 1; font-size: 14px; font-weight: 700; color: #2d2d44; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-meta { font-size: 11px; color: #aaa; white-space: nowrap; }
+.doc-actions { display: flex; gap: 6px; }
+
+/* 视图容器 */
+.view-container { flex: 1; overflow: hidden; background: rgba(255,255,255,0.9); border-radius: 0 0 14px 14px; box-shadow: 0 4px 20px rgba(102,126,234,0.06); display: flex; min-height: 0; }
+
+/* ============================================================
+   PDF 对照视图
+   ============================================================ */
+#viewPdfMd { display: none; width: 100%; flex: 1; flex-direction: column; overflow: hidden; min-height: 0; }
+#viewPdfMd.active { display: flex; }
+
+/* 可拖拽分栏容器 */
+.split-container { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.split-divider {
+    width: 8px; flex-shrink: 0; cursor: col-resize;
+    background: rgba(102,126,234,0.06);
+    border-left: 1px solid rgba(102,126,234,0.1);
+    border-right: 1px solid rgba(102,126,234,0.1);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+    position: relative; z-index: 10;
+}
+.split-divider:hover, .split-divider.dragging { background: rgba(102,126,234,0.15); }
+.split-divider::before {
+    content: '⋮'; font-size: 14px; color: rgba(102,126,234,0.35);
+    letter-spacing: -2px; user-select: none;
+    transition: color 0.15s;
+}
+.split-divider:hover::before, .split-divider.dragging::before { color: #667eea; }
+.split-divider.hidden { display: none; }
+
+/* 面板最小宽度 */
+.pdf-panel { overflow: hidden; display: flex; flex-direction: column; min-width: 120px; height: 100%; }
+.md-panel { overflow: hidden; display: flex; flex-direction: column; min-width: 200px; height: 100%; }
+
+/* 面板隐藏时的样式 */
+.pdf-panel.hidden-panel, .md-panel.hidden-panel { display: none; }
+.split-divider.pdf-hidden, .split-divider.md-hidden { display: none; }
+.pdf-panel-header { height: 36px; flex-shrink: 0; background: rgba(102,126,234,0.04); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+.pdf-panel-header span { font-size: 11px; color: #667eea; font-weight: 600; }
+.pdf-panel-header .page-info { font-size: 11px; color: #aaa; margin-left: 8px; }
+.pdf-toolbar { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.pdf-tool-btn { width: 26px; height: 26px; border: 1px solid rgba(102,126,234,0.12); border-radius: 6px; background: white; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; color: #667eea; transition: all 0.15s; font-family: inherit; }
+.pdf-tool-btn:hover { background: rgba(102,126,234,0.08); border-color: #667eea; }
+.pdf-tool-btn:disabled { opacity: 0.4; cursor: default; }
+.panel-toggle-btn {
+    width: 24px; height: 24px; border: 1px solid rgba(102,126,234,0.12);
+    border-radius: 6px; background: white; cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center; color: #aaa;
+    transition: all 0.15s; font-family: inherit; flex-shrink: 0;
+}
+.panel-toggle-btn:hover { background: rgba(102,126,234,0.06); color: #667eea; border-color: #667eea; }
+.panel-toggle-btn.active { background: rgba(102,126,234,0.08); color: #667eea; }
+#pdfContainer { flex: 1; overflow-y: auto; overflow-x: auto; background: #525659; display: flex; flex-direction: column; align-items: center; padding: 12px; gap: 8px; min-height: 0; }
+.pdf-page-wrap { background: white; box-shadow: 0 4px 16px rgba(0,0,0,0.3); position: relative; flex-shrink: 0; }
+.pdf-page-wrap canvas { display: block; }
+.pdf-page-num { text-align: center; font-size: 10px; color: #aaa; padding: 4px 0 0; }
+
+.md-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; height: 100%; }
+.md-panel-header { height: 36px; flex-shrink: 0; background: rgba(102,126,234,0.04); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+.md-panel-header span { font-size: 11px; color: #667eea; font-weight: 600; }
+.md-panel-header .sync-indicator { margin-left: auto; font-size: 10px; color: #34a853; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.sync-dot { width: 5px; height: 5px; background: #34a853; border-radius: 50%; }
+/* Markdown 源码编辑区（PDF对照视图用） */
+.md-source-editor {
+    flex: 1; width: 100%; height: 100%; border: none; outline: none; resize: none;
+    padding: 16px 20px; font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 13px; line-height: 1.8; color: #2d2d44; background: #fafbff;
+    tab-size: 4; white-space: pre-wrap; word-break: break-all;
+    overflow-y: auto; box-sizing: border-box;
+}
+.md-source-editor::selection { background: rgba(102,126,234,0.2); }
+.md-source-editor::placeholder { color: #ccc; font-family: inherit; }
+
+/* Markdown 源码编辑区 - 滚动条样式 */
+.md-source-editor::-webkit-scrollbar { width: 8px; }
+.md-source-editor::-webkit-scrollbar-track { background: transparent; }
+.md-source-editor::-webkit-scrollbar-thumb { background: rgba(102,126,234,0.15); border-radius: 4px; }
+.md-source-editor::-webkit-scrollbar-thumb:hover { background: rgba(102,126,234,0.3); }
+
+/* 源码+预览横向分栏（PDF对照视图的右侧） */
+.md-editor-wrap { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+.md-source-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.md-source-divider {
+    width: 6px; flex-shrink: 0; cursor: col-resize;
+    background: rgba(102,126,234,0.08); border-left: 1px solid rgba(102,126,234,0.1); border-right: 1px solid rgba(102,126,234,0.1);
+    transition: background 0.15s;
+}
+.md-source-divider:hover { background: rgba(102,126,234,0.2); }
+.md-preview-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; border-left: 1px solid rgba(102,126,234,0.06); }
+.md-preview-header { height: 36px; flex-shrink: 0; background: rgba(102,126,234,0.04); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 14px; font-size: 11px; color: #667eea; font-weight: 600; }
+.md-preview-content { flex: 1; overflow-y: auto; padding: 20px 24px; background: white; cursor: text; -webkit-overflow-scrolling: touch; word-wrap: break-word; overflow-wrap: break-word; font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif; font-size: 14px; line-height: 1.8; }
+.md-preview-content:focus { outline: 2px solid rgba(102,126,234,0.3); outline-offset: -2px; border-radius: 4px; }
+.md-preview-content[contenteditable=true]:empty::before { content: '点击此处编辑预览...'; color: #ccc; font-size: 12px; }
+/* 预览内容样式 */
+.md-preview-content h1 { font-size: 22px; font-weight: 700; color: #2d2d44; margin: 0 0 14px; border-bottom: 2px solid rgba(102,126,234,0.12); padding-bottom: 10px; }
+.md-preview-content h2 { font-size: 17px; font-weight: 700; color: #2d2d44; margin: 22px 0 10px; }
+.md-preview-content h3 { font-size: 15px; font-weight: 600; color: #444; margin: 16px 0 8px; }
+.md-preview-content p { margin: 9px 0; line-height: 1.85; color: #444; }
+.md-preview-content ul, .md-preview-content ol { margin: 9px 0; padding-left: 22px; }
+.md-preview-content li { margin: 3px 0; color: #444; line-height: 1.7; }
+.md-preview-content code { background: #f0f2ff; color: #667eea; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+.md-preview-content pre { background: #f8f9ff; border-radius: 10px; padding: 14px; overflow-x: auto; margin: 12px 0; border: 1px solid rgba(102,126,234,0.1); }
+.md-preview-content pre code { background: none; padding: 0; color: #444; }
+.md-preview-content blockquote { border-left: 3px solid #667eea; margin: 12px 0; padding: 8px 14px; background: rgba(102,126,234,0.04); border-radius: 0 8px 8px 0; color: #666; }
+.md-preview-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.md-preview-content th { background: rgba(102,126,234,0.07); padding: 7px 11px; text-align: left; font-weight: 600; color: #2d2d44; }
+.md-preview-content td { padding: 7px 11px; border-bottom: 1px solid rgba(102,126,234,0.07); color: #555; }
+/* ============================================================
+   Markdown 编辑视图
+   ============================================================ */
+#viewEditor { display: none; width: 100%; flex-direction: column; overflow: hidden; }
+#viewEditor.active { display: flex; }
+.editor-pane { flex: 1; overflow: hidden; display: flex; flex-direction: column; border-right: 1px solid rgba(102,126,234,0.1); min-width: 0; }
+.editor-pane-header { height: 36px; flex-shrink: 0; background: rgba(102,126,234,0.04); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 14px; gap: 8px; }
+.editor-pane-header span { font-size: 11px; color: #667eea; font-weight: 600; }
+.editor-pane-header .shortcut { font-size: 10px; color: #ccc; margin-left: auto; }
+.editor-pane .EasyMDEContainer { display: flex; flex-direction: column; height: 100%; }
+.editor-pane .CodeMirror { flex: 1 !important; height: 100% !important; }
+.editor-pane .editor-toolbar { border: none; border-bottom: 1px solid rgba(102,126,234,0.08); background: rgba(255,255,255,0.5); }
+.preview-pane { flex: 1; overflow: hidden; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.preview-pane-header { height: 36px; flex-shrink: 0; background: rgba(102,126,234,0.04); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 14px; }
+.preview-pane-header span { font-size: 11px; color: #667eea; font-weight: 600; }
+.preview-scroll { flex: 1; overflow-y: auto; padding: 20px 40px; -webkit-overflow-scrolling: touch; min-height: 0; font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC", sans-serif; font-size: 14px; line-height: 1.8; }
+.preview-doc { max-width: 820px; margin: 0 auto; cursor: text; word-wrap: break-word; overflow-wrap: break-word; }
+.preview-doc:focus { outline: 2px solid rgba(102,126,234,0.3); outline-offset: -2px; border-radius: 4px; }
+.preview-doc[contenteditable=true]:empty::before { content: '点击此处编辑预览...'; color: #ccc; font-size: 12px; }
+.preview-doc h1 { font-size: 22px; font-weight: 700; color: #2d2d44; margin: 0 0 14px; border-bottom: 2px solid rgba(102,126,234,0.12); padding-bottom: 10px; }
+.preview-doc h2 { font-size: 17px; font-weight: 700; color: #2d2d44; margin: 22px 0 10px; }
+.preview-doc h3 { font-size: 15px; font-weight: 600; color: #444; margin: 16px 0 8px; }
+.preview-doc p { margin: 9px 0; line-height: 1.85; color: #444; }
+.preview-doc ul, .preview-doc ol { margin: 9px 0; padding-left: 22px; }
+.preview-doc li { margin: 3px 0; color: #444; line-height: 1.7; }
+.preview-doc code { background: #f0f2ff; color: #667eea; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-family: monospace; }
+.preview-doc pre { background: #f8f9ff; border-radius: 10px; padding: 14px; overflow-x: auto; margin: 12px 0; border: 1px solid rgba(102,126,234,0.1); }
+.preview-doc pre code { background: none; padding: 0; color: #444; }
+.preview-doc blockquote { border-left: 3px solid #667eea; margin: 12px 0; padding: 8px 14px; background: rgba(102,126,234,0.04); border-radius: 0 8px 8px 0; color: #666; }
+.preview-doc table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.preview-doc th { background: rgba(102,126,234,0.07); padding: 7px 11px; text-align: left; font-weight: 600; color: #2d2d44; }
+.preview-doc td { padding: 7px 11px; border-bottom: 1px solid rgba(102,126,234,0.07); color: #555; }
+.preview-doc img { max-width: 100%; border-radius: 8px; }
+
+/* ============================================================
+   知识库视图
+   ============================================================ */
+#viewKnowledge { display: none; width: 100%; flex-direction: column; overflow: hidden; }
+#viewKnowledge.active { display: flex; }
+
+/* 知识库搜索栏 */
+.kb-search-bar {
+    height: 52px; flex-shrink: 0;
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(102,126,234,0.08);
+    display: flex; align-items: center; padding: 0 18px; gap: 12px;
+}
+.kb-search-input {
+    flex: 1; background: rgba(255,255,255,0.9);
+    border: 1.5px solid rgba(102,126,234,0.15);
+    border-radius: 20px; padding: 7px 16px;
+    font-size: 13px; color: #444; font-family: inherit; outline: none;
+    transition: all 0.25s;
+}
+.kb-search-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.1); }
+.kb-search-input::placeholder { color: #bbb; }
+
+/* 知识库主体：左树 + 右内容 */
+.kb-body { flex: 1; display: flex; overflow: hidden; }
+
+/* 知识库左侧文档列表 */
+.kb-doc-list { width: 220px; min-width: 180px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid rgba(102,126,234,0.08); padding: 12px; background: rgba(255,255,255,0.5); }
+.kb-doc-list-header { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding: 0 4px; }
+.kb-doc-item { padding: 8px 10px; border-radius: 8px; cursor: pointer; margin-bottom: 2px; transition: all 0.15s; font-size: 12px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-doc-item:hover { background: rgba(102,126,234,0.08); color: #667eea; }
+.kb-doc-item.active { background: rgba(102,126,234,0.12); color: #667eea; font-weight: 600; }
+
+/* 知识库树视图 */
+.kb-tree-panel { width: 300px; min-width: 240px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid rgba(102,126,234,0.08); padding: 12px; }
+.kb-tree-toolbar { display: flex; align-items: center; gap: 4px; margin-bottom: 10px; }
+.kb-tree-toolbar button { padding: 3px 8px; border: 1px solid rgba(102,126,234,0.12); border-radius: 6px; background: white; font-size: 10px; cursor: pointer; color: #667eea; font-family: inherit; transition: all 0.15s; }
+.kb-tree-toolbar button:hover { background: rgba(102,126,234,0.08); }
+.kb-tree-toolbar .sep { flex: 1; }
+.kb-tree-search { width: 100%; background: rgba(255,255,255,0.8); border: 1px solid rgba(102,126,234,0.12); border-radius: 8px; padding: 5px 10px; font-size: 11px; color: #444; font-family: inherit; outline: none; margin-bottom: 10px; }
+.kb-tree-search:focus { border-color: #667eea; }
+
+.tree-node { padding: 0; user-select: none; }
+.tree-node-inner { display: flex; align-items: center; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: all 0.15s; font-size: 12px; color: #555; gap: 6px; }
+.tree-node-inner:hover { background: rgba(102,126,234,0.08); }
+.tree-node-inner.active { background: rgba(102,126,234,0.12); color: #667eea; }
+.tree-node-inner.highlighted { background: rgba(255,200,0,0.15); color: #d48806; }
+.tree-toggle { width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #aaa; flex-shrink: 0; transition: transform 0.15s; }
+.tree-toggle.expanded { transform: rotate(90deg); }
+.tree-toggle.empty { visibility: hidden; }
+.tree-icon { font-size: 12px; flex-shrink: 0; }
+.tree-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-badge { font-size: 9px; background: rgba(102,126,234,0.1); color: #667eea; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.tree-children { padding-left: 16px; }
+
+/* 深度着色 */
+.tree-node[data-level="1"] .tree-node-inner { border-left: 2px solid #667eea; }
+.tree-node[data-level="2"] .tree-node-inner { border-left: 2px solid #34a853; }
+.tree-node[data-level="3"] .tree-node-inner { border-left: 2px solid #f5a623; }
+.tree-node[data-level="0"] .tree-node-inner { border-left: 2px solid #764ba2; font-weight: 700; }
+
+/* 知识库内容面板 */
+.kb-content-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.kb-content-header { height: 40px; flex-shrink: 0; background: rgba(102,126,234,0.03); border-bottom: 1px solid rgba(102,126,234,0.08); display: flex; align-items: center; padding: 0 16px; gap: 8px; }
+.kb-content-title { flex: 1; font-size: 13px; font-weight: 600; color: #2d2d44; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-content-meta { font-size: 10px; color: #aaa; }
+.kb-content-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.kb-content-text { max-width: 820px; margin: 0 auto; font-size: 14px; line-height: 1.85; color: #444; }
+.kb-content-text p { margin: 10px 0; }
+.kb-content-text pre { background: #f8f9ff; border-radius: 10px; padding: 14px; margin: 12px 0; border: 1px solid rgba(102,126,234,0.1); white-space: pre-wrap; word-break: break-all; font-size: 13px; }
+.kb-content-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #ccc; gap: 10px; }
+.kb-content-empty-icon { font-size: 40px; opacity: 0.5; }
+
+/* 知识库问答区 */
+.kb-qa-panel { flex-shrink: 0; border-top: 1px solid rgba(102,126,234,0.08); padding: 12px 16px; background: rgba(255,255,255,0.8); }
+.kb-qa-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.kb-qa-header span { font-size: 11px; color: #667eea; font-weight: 600; }
+.kb-qa-badge { font-size: 9px; background: #34a853; color: white; padding: 1px 6px; border-radius: 4px; }
+.kb-qa-badge.off { background: #ccc; }
+.kb-qa-input-row { display: flex; gap: 8px; }
+.kb-qa-input { flex: 1; background: rgba(255,255,255,0.9); border: 1.5px solid rgba(102,126,234,0.15); border-radius: 20px; padding: 8px 16px; font-size: 13px; color: #444; font-family: inherit; outline: none; }
+.kb-qa-input:focus { border-color: #667eea; }
+.kb-qa-btn { padding: 8px 16px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 20px; font-size: 12px; cursor: pointer; font-family: inherit; font-weight: 600; transition: all 0.15s; }
+.kb-qa-btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(102,126,234,0.3); }
+.kb-qa-btn:disabled { opacity: 0.5; cursor: default; transform: none; box-shadow: none; }
+.kb-qa-answers { max-height: 200px; overflow-y: auto; margin-top: 10px; }
+.kb-answer-item { background: rgba(255,255,255,0.9); border: 1px solid rgba(102,126,234,0.1); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+.kb-answer-q { font-size: 11px; color: #667eea; font-weight: 600; margin-bottom: 6px; }
+.kb-answer-a { font-size: 13px; color: #444; line-height: 1.7; white-space: pre-wrap; }
+.kb-answer-sources { margin-top: 8px; }
+.kb-source-item { display: flex; align-items: flex-start; gap: 6px; font-size: 11px; color: #aaa; padding: 4px 0; border-top: 1px solid rgba(102,126,234,0.06); }
+.kb-source-title { color: #667eea; }
+
+/* ============================================================
+   空白/加载状态
+   ============================================================ */
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ccc; gap: 12px; background: rgba(255,255,255,0.7); border-radius: 14px; backdrop-filter: blur(8px); }
+.empty-icon { font-size: 48px; opacity: 0.5; }
+.empty-text { font-size: 13px; color: #bbb; }
+.loading-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.loading-ring { width: 36px; height: 36px; border: 3px solid rgba(102,126,234,0.12); border-top-color: #667eea; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { font-size: 13px; color: #aaa; }
+
+/* ============================================================
+   弹窗
+   ============================================================ */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.38); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-box { background: white; border-radius: 16px; padding: 24px 28px; max-width: 520px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.15); text-align: left; max-height: 85vh; overflow-y: auto; }
+.modal-box h3 { font-size: 15px; font-weight: 700; color: #2d2d44; margin-bottom: 4px; }
+.modal-box > p { font-size: 12px; color: #888; margin-bottom: 18px; }
+.modal-icon { font-size: 36px; margin-bottom: 10px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.modal-actions.center { justify-content: center; }
+
+/* 设置面板 */
+.settings-form { display: flex; flex-direction: column; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-size: 12px; color: #555; font-weight: 600; }
+.form-group input, .form-group select { background: rgba(255,255,255,0.9); border: 1.5px solid rgba(102,126,234,0.15); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #444; font-family: inherit; outline: none; }
+.form-group input:focus, .form-group select:focus { border-color: #667eea; }
+.form-group .hint { font-size: 11px; color: #aaa; }
+.form-row { display: flex; gap: 12px; }
+.form-row .form-group { flex: 1; }
+.form-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggle-switch { width: 36px; height: 20px; background: #ccc; border-radius: 10px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+.toggle-switch.on { background: linear-gradient(135deg, #667eea, #764ba2); }
+.toggle-switch::after { content: ''; position: absolute; width: 16px; height: 16px; background: white; border-radius: 50%; top: 2px; left: 2px; transition: transform 0.2s; }
+.toggle-switch.on::after { transform: translateX(16px); }
+.toggle-label { font-size: 12px; color: #555; }
+.llm-status { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.llm-status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.llm-status-dot.ok { background: #34a853; }
+.llm-status-dot.off { background: #ccc; }
+.llm-test-result { padding: 10px 12px; border-radius: 8px; font-size: 12px; margin-top: 8px; }
+.llm-test-result.ok { background: rgba(52,168,83,0.1); color: #34a853; border: 1px solid rgba(52,168,83,0.2); }
+.llm-test-result.err { background: rgba(229,62,62,0.08); color: #e53e3e; border: 1px solid rgba(229,62,62,0.15); }
+
+/* Toast */
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: rgba(30,30,50,0.88); backdrop-filter: blur(12px); color: white; padding: 8px 18px; border-radius: 50px; font-size: 12px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,0.18); z-index: 2000; display: none; align-items: center; gap: 6px; }
+.toast.ok { background: rgba(52,168,83,0.9); }
+.toast.err { background: rgba(229,62,62,0.9); }
+@keyframes tIn { from{opacity:0;transform:translate(-50%,10px)} to{opacity:1;transform:translate(-50%,0)} }
+@keyframes tOut { from{opacity:1;transform:translate(-50%,0)} to{opacity:0;transform:translate(-50%,7px)} }
+
+/* ============================================================
+   书籍视图 - Notion 风格拖拽块编辑器
+   ============================================================ */
+#viewBook { display: none; width: 100%; flex-direction: column; overflow: hidden; }
+#viewBook.active { display: flex; }
+
+/* 书籍工具栏 */
+.book-toolbar {
+    height: 44px; flex-shrink: 0;
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(102,126,234,0.08);
+    display: flex; align-items: center; padding: 0 18px; gap: 10px;
+}
+.book-toolbar-title { font-size: 13px; font-weight: 700; color: #2d2d44; flex: 1; }
+.book-toolbar-info { font-size: 11px; color: #aaa; }
+
+/* 书籍滚动区域 */
+.book-scroll {
+    flex: 1; overflow-y: auto; padding: 24px 0;
+    background: #fafbff;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 书籍内容居中容器 */
+.book-page {
+    max-width: 820px; margin: 0 auto; padding: 0 32px;
+}
+
+/* ---- 单个 Block ---- */
+.book-block {
+    position: relative;
+    padding: 6px 12px 6px 36px;
+    margin: 1px 0;
+    border-radius: 6px;
+    cursor: default;
+    transition: background 0.12s ease;
+    min-height: 28px;
+    line-height: 1.75;
+    color: #444;
+    font-size: 14px;
+}
+.book-block:hover {
+    background: rgba(102,126,234,0.04);
+}
+.book-block.dragging {
+    opacity: 0.45;
+    background: rgba(102,126,234,0.06);
+}
+
+/* 拖拽手柄 */
+.block-handle {
+    position: absolute;
+    left: 4px; top: 50%;
+    transform: translateY(-50%);
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: grab;
+    border-radius: 4px;
+    color: transparent;
+    font-size: 14px;
+    transition: all 0.12s ease;
+    user-select: none;
+}
+.book-block:hover .block-handle {
+    color: rgba(102,126,234,0.45);
+}
+.block-handle:hover {
+    color: #667eea !important;
+    background: rgba(102,126,234,0.08);
+}
+.block-handle:active {
+    cursor: grabbing;
+}
+
+/* 拖拽占位线 */
+.block-drop-indicator {
+    height: 3px;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 3px;
+    margin: 0 12px 0 36px;
+    opacity: 0;
+    transition: opacity 0.12s;
+    pointer-events: none;
+}
+.block-drop-indicator.visible {
+    opacity: 1;
+}
+
+/* ---- Block 类型样式 ---- */
+.book-block[data-type="h1"] {
+    font-size: 24px; font-weight: 800; color: #2d2d44;
+    padding-top: 16px; padding-bottom: 10px;
+    border-bottom: 2px solid rgba(102,126,234,0.12);
+    margin-bottom: 8px;
+}
+.book-block[data-type="h2"] {
+    font-size: 19px; font-weight: 700; color: #2d2d44;
+    padding-top: 20px; padding-bottom: 4px;
+    margin-top: 8px;
+}
+.book-block[data-type="h3"] {
+    font-size: 16px; font-weight: 600; color: #444;
+    padding-top: 14px; padding-bottom: 2px;
+}
+.book-block[data-type="h4"] {
+    font-size: 14px; font-weight: 600; color: #555;
+    padding-top: 10px;
+}
+.book-block[data-type="h5"],
+.book-block[data-type="h6"] {
+    font-size: 13px; font-weight: 600; color: #666;
+    padding-top: 8px;
+}
+.book-block[data-type="blockquote"] {
+    border-left: 3px solid #667eea;
+    background: rgba(102,126,234,0.03);
+    padding-left: 48px;
+    color: #666;
+    font-style: italic;
+}
+.book-block[data-type="code"] {
+    font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12.5px;
+    background: rgba(102,126,234,0.04);
+    border: 1px solid rgba(102,126,234,0.08);
+    border-radius: 8px;
+    padding: 12px 12px 12px 36px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.6;
+    color: #555;
+}
+.book-block[data-type="table"] {
+    padding: 8px 12px 8px 36px;
+    overflow-x: auto;
+}
+.book-block[data-type="table"] table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.book-block[data-type="table"] th {
+    background: rgba(102,126,234,0.07); padding: 7px 11px; text-align: left;
+    font-weight: 600; color: #2d2d44; border: 1px solid rgba(102,126,234,0.1);
+}
+.book-block[data-type="table"] td {
+    padding: 7px 11px; border: 1px solid rgba(102,126,234,0.08); color: #555;
+}
+.book-block[data-type="list"] {
+    padding-left: 56px;
+}
+.book-block[data-type="list"] ul,
+.book-block[data-type="list"] ol {
+    margin: 0; padding-left: 20px;
+}
+.book-block[data-type="list"] li {
+    margin: 2px 0; line-height: 1.75;
+}
+.book-block[data-type="hr"] {
+    border: none;
+    border-top: 1px solid rgba(102,126,234,0.12);
+    padding: 0;
+    margin: 12px 36px;
+    min-height: 1px;
+}
+.book-block[data-type="empty"] {
+    min-height: 14px;
+}
+
+/* 块内编辑 */
+.block-content {
+    outline: none;
+    min-height: 1em;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.block-content:focus {
+    background: rgba(102,126,234,0.03);
+    border-radius: 4px;
+}
+
+/* 选中多个块 */
+.book-block.selected {
+    background: rgba(102,126,234,0.08);
+    box-shadow: inset 2px 0 0 #667eea;
+}
+
+/* 书籍选择下拉（当有多本合成书时） */
+.book-select {
+    background: rgba(255,255,255,0.9); border: 1.5px solid rgba(102,126,234,0.15);
+    border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444;
+    font-family: inherit; outline: none; cursor: pointer; max-width: 260px;
+}
+.book-select:focus { border-color: #667eea; }
+</style>
+</head>
+<body>
+
+<!-- 顶栏 -->
+<div class="header">
+    <div class="header-icon">📄</div>
+    <div class="header-title"><h1>知识库</h1><p>PDF / Word / Excel / 图片 / Markdown</p></div>
+    <div class="header-center">
+        <div id="headerProgress">
+            <div class="dot"></div>
+            <div class="bar"><div class="bar-fill" id="headerBarFill"></div></div>
+            <span id="headerProgressText">正在解析 0 个文件...</span>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="view-switcher" id="viewSwitcher">
+            <button class="view-btn" id="btnKnowledge" onclick="switchView('knowledge')">📚 知识库</button>
+            <button class="view-btn active" id="btnPdfMd" onclick="switchView('pdfmd')">📄 PDF对照</button>
+            <button class="view-btn" id="btnEditor" onclick="switchView('editor')">✏ 编辑</button>
+            <button class="view-btn" id="btnBook" onclick="switchView('book')" style="display:none">📖 书籍</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="btnRefresh">🔄 刷新</button>
+        <button class="btn btn-primary btn-sm" id="btnCompileBook" onclick="openCompileBookModal()">📖 合成书</button>
+    </div>
+</div>
+
+<!-- 主区域 -->
+<div class="main">
+
+    <!-- 左侧文件列表 -->
+    <div class="sidebar">
+        <div class="upload-zone" id="uploadZone">
+            <div class="upload-zone-icon">⬆</div>
+            <div class="upload-zone-text">拖拽文件到此处上传</div>
+            <div class="upload-zone-sub">支持 PDF / Word / Excel / 图片 · 最大 50MB</div>
+            <div class="up-progress" id="upProgress">
+                <div class="up-bar"><div class="up-fill" id="upFill"></div></div>
+                <div class="up-pct" id="upPct">0%</div>
+            </div>
+            <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.bmp,.webp,.jfif,.md,.txt,.csv">
+        </div>
+        <div class="list-header">
+            <span>文件列表</span>
+            <span id="fileCount">0 个文件</span>
+            <span class="batch-select-toggle" id="batchToggle" onclick="toggleBatchMode()">☑ 批量</span>
+        </div>
+        <div class="file-list" id="fileList">
+            <div class="list-empty">暂无文件，上传一个试试</div>
+        </div>
+        <!-- 批量操作栏 -->
+        <div class="batch-bar" id="batchBar">
+            <span class="batch-info" id="batchInfo">已选 0 个</span>
+            <button class="batch-btn select-all" onclick="batchSelectAll()" id="btnSelectAll">☑ 全选</button>
+            <button class="batch-btn export" id="btnBatchExport" onclick="batchExport()" disabled>📦 打包导出</button>
+            <button class="batch-btn del-batch" onclick="batchDelete()">🗑 删除</button>
+            <button class="batch-btn cancel" onclick="toggleBatchMode()">取消</button>
+        </div>
+    </div>
+
+    <!-- 右侧内容区 -->
+    <div class="content-area" id="contentArea">
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">📋</div>
+            <div class="empty-text">从左侧选择一个文件查看内容</div>
+        </div>
+
+        <!-- 三视图容器 -->
+        <div id="docWrap" style="display:none; flex-direction:column; flex:1; overflow:hidden; min-height:0;">
+
+            <!-- 文档顶栏 -->
+            <div class="doc-header">
+                <div class="doc-title" id="docTitle">文件名.pdf</div>
+                <div class="doc-meta" id="docMeta"></div>
+                <div class="doc-actions">
+                    <button class="btn btn-primary btn-sm" id="btnSave">💾 保存</button>
+                    <button class="btn btn-ghost btn-sm" id="btnDownload">📥 导出.md</button>
+                    <button class="btn btn-ghost btn-sm" onclick="exportBackendPDF()">📄 导出PDF</button>
+                    <button class="btn btn-ghost btn-sm" id="btnClassifyExcel" onclick="doClassifyExcel()">🤖 AI分类</button>
+                    <button class="btn btn-ghost btn-sm" id="btnSettings" onclick="openSettingsModal()">⚙️ 设置</button>
+                </div>
+            </div>
+
+            <!-- 视图容器 -->
+            <div class="view-container">
+
+                <!-- 视图1: 知识库 -->
+                <div id="viewKnowledge">
+                    <!-- 搜索栏 -->
+                    <div class="kb-search-bar">
+                        <input type="text" class="kb-search-input" id="kbSearchInput" placeholder="🔍 在知识库中搜索..." onkeydown="if(event.key==='Enter') doKbSearch()">
+                        <button class="btn btn-primary btn-sm" onclick="doKbSearch()">搜索</button>
+                    </div>
+                    <!-- 主体 -->
+                    <div class="kb-body">
+                        <!-- 左：文档列表 -->
+                        <div class="kb-doc-list" id="kbDocList">
+                            <div class="kb-doc-list-header">📁 文档</div>
+                            <div id="kbDocItems">
+                                <div style="font-size:12px;color:#ccc;padding:8px 4px">暂无文档，请先上传并解析文件</div>
+                            </div>
+                        </div>
+                        <!-- 中：树结构 -->
+                        <div class="kb-tree-panel" id="kbTreePanel">
+                            <div class="kb-tree-toolbar">
+                                <button onclick="treeExpandAll()">全部展开</button>
+                                <button onclick="treeCollapseAll()">全部折叠</button>
+                                <div class="sep"></div>
+                                <button onclick="openSettingsModal()">⚙️</button>
+                            </div>
+                            <input type="text" class="kb-tree-search" id="kbTreeSearch" placeholder="🔍 过滤节点..." oninput="filterTree()">
+                            <div id="kbTreeNodes">
+                                <div class="empty-state" style="border-radius:12px">
+                                    <div class="empty-icon">🌲</div>
+                                    <div class="empty-text">选择一个文档查看结构</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 右：内容 -->
+                        <div class="kb-content-panel">
+                            <div class="kb-content-header" id="kbContentHeader" style="display:none">
+                                <div class="kb-content-title" id="kbContentTitle"></div>
+                                <div class="kb-content-meta" id="kbContentMeta"></div>
+                            </div>
+                            <div class="kb-content-body" id="kbContentBody">
+                                <div class="kb-content-empty" id="kbContentEmpty">
+                                    <div class="kb-content-empty-icon">📖</div>
+                                    <div class="empty-text">从左侧树结构中选择节点查看内容</div>
+                                </div>
+                            </div>
+                            <!-- 问答区 -->
+                            <div class="kb-qa-panel" id="kbQaPanel">
+                                <div class="kb-qa-header">
+                                    <span>💬 智能问答</span>
+                                    <span class="kb-qa-badge off" id="llmBadge">LLM 未配置</span>
+                                </div>
+                                <div class="kb-qa-input-row">
+                                    <input type="text" class="kb-qa-input" id="kbQaInput" placeholder="输入问题，按 Enter 搜索..." onkeydown="if(event.key==='Enter') doKbAsk()">
+                                    <button class="kb-qa-btn" id="kbQaBtn" onclick="doKbAsk()">提问</button>
+                                </div>
+                                <div class="kb-qa-answers" id="kbQaAnswers"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视图2: PDF对照 -->
+                <div id="viewPdfMd">
+                    <div class="split-container" id="splitContainer">
+                        <!-- PDF 面板 -->
+                        <div class="pdf-panel" id="pdfPanel">
+                            <div class="pdf-panel-header">
+                                <span>📄 原始 PDF</span>
+                                <span class="page-info" id="pdfPageInfo"></span>
+                                <div class="pdf-toolbar">
+                                    <button class="pdf-tool-btn" id="pdfZoomOut" title="缩小">−</button>
+                                    <button class="pdf-tool-btn" id="pdfZoomIn" title="放大">+</button>
+                                    <button class="pdf-tool-btn" id="pdfFitWidth" title="适合宽度">↔</button>
+                                </div>
+                                <button class="panel-toggle-btn active" id="pdfToggleBtn" title="收起/展开 PDF" onclick="togglePdfPanel()">◀</button>
+                            </div>
+                            <div id="pdfContainer">
+                                <div class="loading-wrap" style="background:transparent">
+                                    <div class="loading-ring"></div>
+                                    <div class="loading-msg">加载 PDF...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 可拖拽分隔条：左右拖拽调整宽度，双击切换50/50或100% -->
+                        <div class="split-divider" id="splitDivider" onmousedown="startSplitDrag(event)"></div>
+                        <!-- Markdown 面板（源码左 + 预览右） -->
+                        <div class="md-panel" id="mdPanel">
+                            <div class="md-panel-header">
+                                <span>📝 Markdown</span>
+                                <span style="font-size:10px;color:#ccc;margin-left:4px">Ctrl+S 保存</span>
+                                <span class="sync-indicator" id="mdSaveStatus" style="margin-left:auto;font-size:10px;color:#aaa"></span>
+                                <button class="panel-toggle-btn" id="mdToggleBtn" title="收起/展开 Markdown" onclick="toggleMdPanel()">▶</button>
+                            </div>
+                            <!-- 源码+预览横向分栏 -->
+                            <div class="md-editor-wrap" id="mdEditorWrap">
+                                <div class="md-source-wrap" id="mdSourceWrap">
+                                    <textarea id="mdSourceTa" class="md-source-editor" spellcheck="false" placeholder="Markdown 源码..."></textarea>
+                                </div>
+                                <div class="md-source-divider" id="mdSourceDivider" onmousedown="startMdSourceDrag(event)"></div>
+                                <div class="md-preview-wrap" id="mdPreviewWrap">
+                                    <div class="md-preview-header">👁 预览 <span style="font-size:10px;color:#aaa;margin-left:6px">可直接编辑</span></div>
+                                    <div class="md-preview-content" id="mdPreviewContent" contenteditable="true"><div style="color:#ccc;font-size:12px;text-align:center;padding:40px">预览区域</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视图3: Markdown 编辑 -->
+                <div id="viewEditor">
+                    <div class="editor-pane">
+                        <div class="editor-pane-header">
+                            <span>📝 Markdown 源码</span>
+                            <span class="shortcut">Ctrl+S 保存</span>
+                        </div>
+                        <div id="editorInner"><textarea id="mdeTa" style="display:none"></textarea></div>
+                    </div>
+                    <div class="preview-pane">
+                        <div class="preview-pane-header"><span>👁 实时预览</span><span style="font-size:10px;color:#aaa;margin-left:6px">可直接编辑</span><button onclick="exportBackendPDF()" style="margin-left:auto;padding:3px 10px;border:1px solid rgba(102,126,234,0.2);border-radius:6px;background:white;font-size:11px;color:#667eea;cursor:pointer;font-weight:600;">📄 导出PDF</button></div>
+                        <div class="preview-scroll">
+                            <div class="preview-doc" id="previewDoc" contenteditable="true"><div style="text-align:center;color:#ccc;padding:40px">编辑左侧源码，预览同步显示...</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 视图4: 书籍 Notion 拖拽编辑 -->
+                <div id="viewBook">
+                    <div class="book-toolbar">
+                        <span class="book-toolbar-title" id="bookViewTitle">📖 书籍预览</span>
+                        <select class="book-select" id="bookSelect" onchange="loadBookContent(this.value)" style="display:none"></select>
+                        <span class="book-toolbar-info" id="bookBlockCount"></span>
+                        <button class="btn btn-primary btn-sm" id="btnSaveBook" onclick="saveBookBlocks()">💾 保存</button>
+                        <button class="btn btn-ghost btn-sm" onclick="downloadCurrentBook()">📥 导出</button>
+                    </div>
+                    <div class="book-scroll" id="bookScroll">
+                        <div class="book-page" id="bookPage">
+                            <div class="kb-content-empty" id="bookEmpty">
+                                <div class="kb-content-empty-icon">📖</div>
+                                <div class="empty-text">请先合成一本书，或从下拉列表选择已有书籍</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="modal-overlay" id="delModal" style="display:none">
+    <div class="modal-box">
+        <div class="modal-icon">⚠️</div>
+        <h3>确认删除</h3>
+        <p id="delText">确定要删除此文件吗？此操作不可恢复。</p>
+        <div class="modal-actions center">
+            <button class="btn btn-ghost" id="btnCancelDel">取消</button>
+            <button class="btn btn-danger" id="btnConfirmDel">确认删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- 合成书弹窗 -->
+<div class="modal-overlay" id="compileBookModal" style="display:none">
+    <div class="modal-box" style="width:400px;max-width:95vw">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">📖 合成为一本书</h3>
+            <button onclick="closeCompileBookModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#aaa">✕</button>
+        </div>
+        <div id="bookDetectInfo" style="font-size:12px;color:#888;background:#f7f8ff;border-radius:8px;padding:10px 12px;margin-bottom:14px;min-height:36px">
+            正在检测大纲文件...
+        </div>
+        <div id="bookCompileStatus" style="font-size:12px;color:#667eea;min-height:18px;margin-bottom:10px"></div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost btn-sm" onclick="closeCompileBookModal()">取消</button>
+            <button class="btn btn-primary btn-sm" id="btnStartCompile" onclick="startCompileBook()">🚀 一键合成</button>
+        </div>
+    </div>
+</div>
+
+<!-- 设置弹窗 -->
+<div class="modal-overlay" id="settingsModal" style="display:none">
+    <div class="modal-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <h3 style="margin:0">⚙️ LLM 设置</h3>
+            <button onclick="closeSettingsModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#aaa">✕</button>
+        </div>
+        <p>配置大语言模型 API，开启智能问答功能</p>
+        <div class="settings-form">
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="cfgApiKey" placeholder="sk-..." autocomplete="off">
+                <span class="hint">支持 OpenAI 兼容接口（DeepSeek、OpenAI 等）</span>
+            </div>
+            <div class="form-group">
+                <label>API Base URL</label>
+                <input type="text" id="cfgApiBase" placeholder="https://api.deepseek.com">
+                <span class="hint">LLM API 的接口地址前缀</span>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>模型名称</label>
+                    <input type="text" id="cfgModel" placeholder="deepseek-chat">
+                </div>
+                <div class="form-group">
+                    <label>Temperature</label>
+                    <input type="number" id="cfgTemp" value="0.7" min="0" max="2" step="0.1">
+                </div>
+            </div>
+            <div class="form-toggle" onclick="toggleLlmEnabled()">
+                <div class="toggle-switch" id="cfgToggle"></div>
+                <span class="toggle-label">启用 LLM 智能问答</span>
+            </div>
+            <div class="llm-status" id="llmStatusEl">
+                <div class="llm-status-dot off" id="llmStatusDot"></div>
+                <span id="llmStatusText">未配置</span>
+            </div>
+            <div id="llmTestResult"></div>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost btn-sm" onclick="testLlm()">🔗 测试连接</button>
+            <button class="btn btn-primary btn-sm" onclick="saveLlmConfig()">💾 保存配置</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span id="toastMsg"></span></div>
+
+<script>
+// 设置 PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.bootcdn.net/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ================================================================
+// 全局变量
+// ================================================================
+var fileListData = [];
+var currentFileId = null;
+var currentFilePath = null;
+var currentMdContent = '';
+var mdeInstance = null;
+var pollTimer = null;
+var pendingDeleteIds = [];
+var currentView = 'pdfmd';
+var isSyncingScroll = false;
+
+// PDF 状态
+var pdfState = { pdfDoc: null, totalPages: 0, currentPage: 1, renderScale: 1.5, MIN_SCALE: 0.5, MAX_SCALE: 3.0, renderedPages: {}, pageHeightMap: {}, pageOffsets: {}, totalScrollHeight: 0 };
+
+// 懒渲染
+var lazyState = { fullContent: '', parsedParts: [], loadedChunks: 0, CHUNK_SIZE: 200, isFullyLoaded: false, renderTimer: null, DEBOUNCE_MS: 600 };
+
+// 知识库状态
+var kbState = { docs: [], currentDocId: null, currentTree: null, selectedNode: null, allTreeNodes: [], expandedNodes: new Set(), llmEnabled: false, searchResults: [] };
+
+// ================================================================
+// 工具函数
+// ================================================================
+function $(id) { return document.getElementById(id); }
+function fmtSize(b) { if (!b) return '0 B'; if (b < 1024) return b + ' B'; if (b < 1048576) return (b / 1024).toFixed(1) + ' KB'; return (b / 1048576).toFixed(1) + ' MB'; }
+function fmtTime(ts) { if (!ts || isNaN(ts)) return '未知时间'; return new Date(ts * 1000).toLocaleDateString('zh-CN'); }
+function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// ================================================================
+// Toast
+// ================================================================
+function toast(msg, type) {
+    type = type || '';
+    var el = $('toast');
+    el.className = 'toast ' + type;
+    $('toastMsg').textContent = msg;
+    el.style.display = 'flex';
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = 'tIn 0.3s ease forwards';
+    clearTimeout(el._t);
+    el._t = setTimeout(function() {
+        el.style.animation = 'tOut 0.22s ease forwards';
+        setTimeout(function() { el.style.display = 'none'; }, 220);
+    }, 2500);
+}
+
+// ================================================================
+// API（自动适配当前访问的地址，不管是 localhost 还是局域网 IP）
+// ================================================================
+var API = (window.location.origin || (window.location.protocol + '//' + window.location.host)) + '/api';
+
+function apiUpload(file, onProgress) {
+    return new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        var form = new FormData();
+        form.append('file', file);
+        xhr.open('POST', API + '/upload');
+        xhr.upload.onprogress = function(e) { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100)); };
+        xhr.onload = function() { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error(xhr.responseText)); };
+        xhr.onerror = function() { reject(new Error('网络错误')); };
+        xhr.send(form);
+    });
+}
+
+function apiList() { return fetch(API + '/files').then(function(r) { return r.json(); }); }
+function apiContent(id) { return fetch(API + '/file-content/' + id).then(function(r) { return r.json(); }); }
+function apiSave(id, content) {
+    return fetch(API + '/file-content/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: content }) }).then(function(r) { return r.json(); });
+}
+function apiDelete(ids) {
+    return fetch(API + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_ids: ids }) }).then(function(r) { return r.json(); });
+}
+
+// KB API
+function apiKbList() { return fetch(API + '/kb/list').then(function(r) { return r.json(); }); }
+function apiKbTree(fileId) { return fetch(API + '/kb/tree/' + fileId).then(function(r) { return r.json(); }); }
+function apiKbSearch(query, fileId) {
+    var url = API + '/kb/search?q=' + encodeURIComponent(query);
+    if (fileId) url += '&file_id=' + fileId;
+    return fetch(url).then(function(r) { return r.json(); });
+}
+function apiKbAsk(query, fileId) {
+    return fetch(API + '/kb/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query, file_id: fileId || null, top_k: 5 })
+    }).then(function(r) { return r.json(); });
+}
+function apiKbConfig() { return fetch(API + '/kb/config').then(function(r) { return r.json(); }); }
+function apiKbSaveConfig(cfg) {
+    return fetch(API + '/kb/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
+}
+function apiKbTestLlm(cfg) {
+    return fetch(API + '/kb/test-llm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
+}
+
+// ================================================================
+// 视图切换
+// ================================================================
+function switchView(view) {
+    currentView = view;
+    // 视图 → 按钮 ID 映射表（避免大小写匹配问题）
+    var btnMap = {'knowledge': 'btnKnowledge', 'pdfmd': 'btnPdfMd', 'editor': 'btnEditor', 'book': 'btnBook'};
+    ['btnKnowledge', 'btnPdfMd', 'btnEditor', 'btnBook'].forEach(function(id) { $(id).classList.remove('active'); });
+    var btnId = btnMap[view] || 'btn' + view.charAt(0).toUpperCase() + view.slice(1);
+    $(btnId).classList.add('active');
+    $('viewPdfMd').classList.toggle('active', view === 'pdfmd');
+    $('viewEditor').classList.toggle('active', view === 'editor');
+    $('viewKnowledge').classList.toggle('active', view === 'knowledge');
+    $('viewBook').classList.toggle('active', view === 'book');
+    // EasyMDE 只在真正需要编辑时才初始化（避免卡顿）
+    if (view === 'editor' && !mdeInstance) {
+        // 内容未加载时，先切换视图（用户会看到空编辑器）
+        // 等内容加载完会自动初始化
+        if (currentMdContent) {
+            initEditor(currentMdContent);
+        }
+    }
+    // 切换到书籍视图时，如果还没有加载过，自动加载书籍列表
+    if (view === 'book' && !_bookListLoaded) {
+        loadBookList();
+    }
+}
+
+// ================================================================
+// 渲染文件列表
+// ================================================================
+function renderFileList() {
+    var box = $('fileList');
+    if (batchMode) box.classList.add('batch-mode'); else box.classList.remove('batch-mode');
+    var files = fileListData.slice().sort(function(a, b) { return b.created_at - a.created_at; });
+    $('fileCount').textContent = files.length + ' 个文件';
+    if (files.length === 0) { box.innerHTML = '<div class="list-empty">暂无文件，上传一个试试</div>'; return; }
+    box.innerHTML = files.map(function(f) {
+        var ext = (f.file_ext || '?').toUpperCase();
+        var isActive = f.id === currentFileId;
+        var statusHTML = '';
+        if (f.status === 'done') statusHTML = '<span class="status-done"><span class="dot"></span><span class="label">已完成</span></span>';
+        else if (f.status === 'parsing') statusHTML = '<span class="status-parsing"><span class="dot"></span><span class="label">解析中</span></span>';
+        else if (f.status === 'error') statusHTML = '<span class="status-error"><span class="dot"></span><span class="label">失败</span></span>';
+        var parseBar = f.status === 'parsing' ? '<div class="card-parse-bar show"><div class="card-parse-fill" style="width:' + (f._pct || 0) + '%"></div></div>' : '';
+        var errorTip = (f.status === 'error' && f.error_msg) ? '<div style="font-size:10px;color:#e53e3e;margin-top:4px">❌ ' + esc(String(f.error_msg).substring(0, 50)) + '</div>' : '';
+        var isChecked = selectedIds.indexOf(f.id) !== -1;
+        var checkboxHtml = '<input type="checkbox" class="card-checkbox" ' + (isChecked ? 'checked' : '') + ' onclick="event.stopPropagation(); onCheckFile(' + f.id + ', this.checked)">';
+        return '<div class="file-card' + (isActive ? ' active' : '') + (isChecked ? ' checked' : '') + '" data-id="' + f.id + '">' +
+            checkboxHtml +
+            '<div class="card-top-bar"></div><div class="card-body">' +
+            '<div class="card-top"><span class="card-ext">' + esc(ext) + '</span><span class="card-name" title="' + esc(f.original_name) + '">' + esc(f.original_name) + '</span><span class="card-status">' + statusHTML + '</span></div>' +
+            '<div class="card-meta"><span>' + fmtSize(f.file_size) + '</span><span>' + fmtTime(f.created_at) + '</span></div>' +
+            parseBar + errorTip +
+            '<div class="card-actions">' +
+            '<button class="card-btn edit" onclick="event.stopPropagation(); openFile(' + f.id + ')">✏ ' + (f.status === 'done' ? '打开' : f.status === 'error' ? '重试' : '查看') + '</button>' +
+            (f.status === 'done' ? '<button class="card-btn" onclick="event.stopPropagation(); downloadFile(' + f.id + ')">📥</button>' : '') +
+            '<button class="card-btn del" onclick="event.stopPropagation(); askDelete(' + f.id + ')">🗑</button>' +
+            '</div></div></div>';
+    }).join('');
+    box.querySelectorAll('.file-card').forEach(function(card) {
+        card.onclick = function() { openFile(parseInt(this.getAttribute('data-id'), 10)); };
+    });
+}
+
+// ================================================================
+// 打开文件
+// ================================================================
+function openFile(fileId) {
+    var file = fileListData.find(function(f) { return f.id === fileId; });
+    if (!file) return;
+    currentFileId = fileId;
+    var cards = $('fileList').querySelectorAll('.file-card');
+    cards.forEach(function(c) { c.classList.remove('active'); });
+    var ac = $('fileList').querySelector('.file-card[data-id="' + fileId + '"]');
+    if (ac) ac.classList.add('active');
+    $('emptyState').style.display = 'none';
+    $('docWrap').style.display = 'flex';
+    var fileExt = (file.file_ext || '').toUpperCase();
+    $('docTitle').textContent = file.original_name || '未命名';
+    $('docMeta').textContent = fileExt + ' · ' + fmtTime(file.created_at) + ' · ' + fmtSize(file.file_size);
+    resetLazyState();
+    resetPdfState();
+    // 点击文件 → 自动切换到 PDF+MD 双栏视图
+    switchView('pdfmd');
+    if (file.status === 'parsing') { showPdfLoading('正在解析，请稍候...'); }
+    else if (file.status === 'error') { showPdfError('文件解析失败：' + (file.error_msg || '未知错误')); }
+    else if (file.status === 'done') { showPdfLoading('正在加载...'); loadPdfAndMd(fileId, file); }
+}
+
+// ================================================================
+// PDF + MD 加载
+// ================================================================
+function loadPdfAndMd(fileId, file) {
+    apiContent(fileId).then(function(data) {
+        if (!data.success) { showPdfError(data.message || '加载失败'); return; }
+        currentMdContent = data.content || '';
+        currentFilePath = file.stored_name;
+        if (file.file_ext && file.file_ext.toLowerCase() === 'pdf') {
+            var pdfUrl = API + '/upload-file/' + currentFilePath;
+            loadPdf(pdfUrl, currentMdContent);
+        } else {
+            // 非 PDF 文件：左侧显示格式提示，右侧显示 Markdown
+            $('pdfContainer').innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:16px;padding:20px;text-align:center;background:#f8f9ff;border-radius:8px;margin:12px;"><div style="font-size:52px">📄</div><div style="font-size:15px;font-weight:700;color:#667eea">' + esc(file.file_ext || '文件') + '</div><div style="font-size:12px;color:#aaa">此格式不支持原始预览</div><div style="font-size:12px;color:#bbb;margin-top:4px">右侧为解析后的 Markdown 内容</div></div>';
+            $('pdfPageInfo').textContent = '非 PDF';
+            showMdContent(currentMdContent, 1, 1);
+        }
+    }).catch(function() { showPdfError('网络错误，请检查后端服务'); });
+}
+
+function loadPdf(url, mdContent) {
+    resetPdfState();
+    pdfjsLib.getDocument(url).promise.then(function(pdf) {
+        pdfState.pdfDoc = pdf;
+        pdfState.totalPages = pdf.numPages;
+        $('pdfPageInfo').textContent = '共 ' + pdf.numPages + ' 页';
+        renderAllPdfPages(pdf, mdContent);
+    }).catch(function(err) {
+        // PDF 加载失败：左侧显示友好提示，右侧正常显示 Markdown
+        var errMsg = String(err.message || '加载失败');
+        var isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        var hint = '';
+        if (errMsg.indexOf('404') !== -1 || errMsg.indexOf('Missing PDF') !== -1) {
+            hint = '<div style="font-size:11px;color:#aaa;margin-top:8px">后端服务未启动或文件不存在</div>';
+        } else if (!isLocalhost) {
+            hint = '<div style="font-size:11px;color:#f5a623;margin-top:8px">⚠️ 请使用 localhost:5000 访问本页面</div>';
+        }
+        $('pdfContainer').innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px;text-align:center"><div style="font-size:40px">📄</div><div style="font-size:13px;color:#555">PDF 加载失败</div><div style="font-size:11px;color:#999;max-width:240px">右侧已显示解析后的 Markdown 内容</div>' + hint + '</div>';
+        $('pdfPageInfo').textContent = 'PDF 加载失败';
+        showMdContent(mdContent, 1, 1);
+    });
+}
+
+function renderAllPdfPages(pdf, mdContent) {
+    $('pdfContainer').innerHTML = '';
+    var container = $('pdfContainer');
+    var scale = pdfState.renderScale;
+    var totalPages = pdfState.totalPages;
+    var promises = [];
+    for (var p = 1; p <= totalPages; p++) { promises.push(renderPdfPage(p, pdf, container, scale)); }
+    Promise.all(promises).then(function() {
+        buildPageOffsets();
+        showMdContent(mdContent, 1, totalPages);
+        bindPdfScrollSync();
+        bindPdfZoom();
+    });
+}
+
+function renderPdfPage(pageNum, pdf, container, scale) {
+    return pdf.getPage(pageNum).then(function(page) {
+        var viewport = page.getViewport({ scale: scale });
+        var wrap = document.createElement('div');
+        wrap.className = 'pdf-page-wrap';
+        wrap.id = 'pdfPage' + pageNum;
+        wrap.dataset.page = pageNum;
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        canvas.style.width = Math.floor(viewport.width) + 'px';
+        canvas.style.height = Math.floor(viewport.height) + 'px';
+        wrap.appendChild(canvas);
+        container.appendChild(wrap);
+        var numLabel = document.createElement('div');
+        numLabel.className = 'pdf-page-num';
+        numLabel.textContent = '第 ' + pageNum + ' / ' + pdfState.totalPages + ' 页';
+        container.appendChild(numLabel);
+        pdfState.renderedPages[pageNum] = canvas;
+        var rc = { canvasContext: ctx, viewport: viewport, transform: [dpr, 0, 0, dpr, 0, 0] };
+        return page.render(rc).promise.then(function() {
+            pdfState.pageHeightMap[pageNum] = viewport.height + 24;
+        });
+    });
+}
+
+function buildPageOffsets() {
+    var container = $('pdfContainer');
+    var wrapEls = container.querySelectorAll('.pdf-page-wrap');
+    var offset = 0;
+    pdfState.pageOffsets = {};
+    for (var i = 0; i < wrapEls.length; i++) {
+        var pn = parseInt(wrapEls[i].dataset.page, 10);
+        pdfState.pageOffsets[pn] = offset;
+        offset += pdfState.pageHeightMap[pn] || 0;
+    }
+    pdfState.totalScrollHeight = offset;
+}
+
+function resetPdfState() { var ps = pdfState; ps.pdfDoc = null; ps.totalPages = 0; ps.currentPage = 1; ps.renderedPages = {}; ps.pageHeightMap = {}; ps.pageOffsets = {}; ps.totalScrollHeight = 0; isSyncingScroll = false; }
+function showPdfLoading(msg) { $('pdfContainer').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">' + esc(msg) + '</div></div>'; $('pdfPageInfo').textContent = ''; }
+function showPdfError(msg) { $('pdfContainer').innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;padding:20px;text-align:center"><div style="font-size:32px">⚠️</div><div style="font-size:13px;color:#555">无法加载 PDF</div><div style="font-size:12px;color:#999;max-width:280px">' + esc(msg) + '</div></div>'; }
+
+// ============================================================
+// 双向同步工具：HTML ↔ Markdown
+// ============================================================
+// Turndown 实例（HTML → Markdown）
+var _turndownService = null;
+function getTurndown() {
+    if (!_turndownService && typeof TurndownService !== 'undefined') {
+        _turndownService = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced',
+            bulletListMarker: '-',
+            emDelimiter: '*'
+        });
+        // 保留表格转换
+        _turndownService.addRule('tableCell', {
+            filter: ['th', 'td'],
+            replacement: function(content) { return ' ' + content.trim() + ' |'; }
+        });
+        _turndownService.addRule('tableRow', {
+            filter: 'tr',
+            replacement: function(content) { return '|' + content + '\n'; }
+        });
+        _turndownService.addRule('tableHead', {
+            filter: 'thead',
+            replacement: function(content) {
+                var cols = (content.match(/\|/g) || []).length - 1;
+                var sep = '|' + ' --- |'.repeat(cols) + '\n';
+                return content + sep;
+            }
+        });
+        _turndownService.addRule('table', {
+            filter: 'table',
+            replacement: function(content) { return '\n' + content + '\n'; }
+        });
+    }
+    return _turndownService;
+}
+
+// 防抖变量：防止 Markdown→预览→Markdown 循环触发
+var _syncLock = false;
+var _previewInputTimer = null;
+var _previewInputTimer2 = null;
+
+function showMdContent(mdText, currentPage, totalPdfPages) {
+    // PDF+MD 视图：左侧 textarea 源码，右侧实时预览
+    var ta = $('mdSourceTa');
+    if (ta) {
+        ta.value = mdText || '';
+        ta.scrollTop = 0;
+        // 渲染预览
+        renderMdPreview(mdText || '');
+        // 监听输入，实时更新预览（源码 → 预览）
+        ta.oninput = function() {
+            if (_syncLock) return;
+            _syncLock = true;
+            renderMdPreview(ta.value);
+            _syncLock = false;
+        };
+
+        // 监听预览区域编辑（预览 → 源码）
+        var preview = $('mdPreviewContent');
+        if (preview) {
+            preview.addEventListener('input', function() {
+                if (_syncLock) return;
+                clearTimeout(_previewInputTimer);
+                _previewInputTimer = setTimeout(function() {
+                    _syncLock = true;
+                    var td = getTurndown();
+                    if (td) {
+                        var newMd = td.turndown(preview.innerHTML);
+                        ta.value = newMd;
+                        currentMdContent = newMd;
+                    }
+                    _syncLock = false;
+                }, 300);
+            });
+        }
+
+        // 滚动同步：源码滚动 → 预览跟随
+        ta.onscroll = function() {
+            var preview = $('mdPreviewContent');
+            if (!preview) return;
+            var maxSrc = ta.scrollHeight - ta.clientHeight;
+            if (maxSrc <= 0) return;
+            var ratio = ta.scrollTop / maxSrc;
+            var maxPrv = preview.scrollHeight - preview.clientHeight;
+            preview.scrollTop = ratio * maxPrv;
+        };
+        // 点击跳转同步：光标所在行 → 预览对应位置
+        function syncTaCursorToPreview() {
+            var preview = $('mdPreviewContent');
+            if (!preview) return;
+            var text = ta.value;
+            var pos = ta.selectionStart;
+            var lines = text.split('\n');
+            var linesBefore = text.substring(0, pos).split('\n').length;
+            var totalLines = lines.length;
+            var ratio = totalLines > 1 ? (linesBefore - 1) / (totalLines - 1) : 0;
+            var maxPrv = preview.scrollHeight - preview.clientHeight;
+            if (maxPrv > 0) preview.scrollTop = ratio * maxPrv;
+        }
+        ta.onclick = syncTaCursorToPreview;
+        ta.onkeyup = syncTaCursorToPreview;
+    }
+}
+
+function renderMdPreview(mdText) {
+    var preview = $('mdPreviewContent');
+    if (!preview) return;
+    if (!mdText.trim()) {
+        preview.innerHTML = '<div style="color:#ccc;font-size:12px;text-align:center;padding:40px">预览区域</div>';
+        return;
+    }
+    if (typeof marked !== 'undefined') {
+        try {
+            // 尝试正常渲染
+            preview.innerHTML = marked.parse(mdText);
+        } catch (e) {
+            // 渲染失败时，显示纯文本（确保内容可见）
+            console.warn('Markdown渲染失败，显示纯文本：', e.message);
+            preview.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;font-size:13px;line-height:1.7;background:#fff8f8;border:1px solid #ffe0e0;padding:12px;border-radius:8px">' + esc(mdText) + '</pre>';
+        }
+    } else {
+        preview.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;font-size:13px;line-height:1.7">' + esc(mdText) + '</pre>';
+    }
+}
+
+// 源码/预览分隔条拖拽
+var mdSplitState = { isDragging: false, ratio: 0.5 };
+function startMdSourceDrag(e) {
+    e.preventDefault();
+    mdSplitState.isDragging = true;
+    document.addEventListener('mousemove', onMdSourceDrag);
+    document.addEventListener('mouseup', stopMdSourceDrag);
+}
+function onMdSourceDrag(e) {
+    if (!mdSplitState.isDragging) return;
+    var wrap = $('mdEditorWrap');
+    if (!wrap) return;
+    var rect = wrap.getBoundingClientRect();
+    var ratio = (e.clientX - rect.left) / rect.width;
+    ratio = Math.max(0.2, Math.min(0.8, ratio));
+    var src = $('mdSourceWrap');
+    var prv = $('mdPreviewWrap');
+    if (src && prv) {
+        src.style.flex = 'none';
+        src.style.width = (ratio * 100).toFixed(1) + '%';
+        prv.style.flex = 'none';
+        prv.style.width = ((1 - ratio) * 100).toFixed(1) + '%';
+    }
+}
+function stopMdSourceDrag() {
+    mdSplitState.isDragging = false;
+    document.removeEventListener('mousemove', onMdSourceDrag);
+    document.removeEventListener('mouseup', stopMdSourceDrag);
+}
+
+function bindPdfScrollSync() {
+    var pdfContainer = $('pdfContainer');
+    if (!pdfContainer) return;
+    var mdTa = $('mdSourceTa');
+    // Markdown 现在是 textarea 源码编辑区，不再做页码级同步，各自独立滚动
+    pdfContainer.onscroll = function() {
+        updateCurrentPdfPage();
+    };
+    // textarea 只做自己的滚动，不干扰 PDF
+    if (mdTa) {
+        mdTa.onscroll = function() { /* 源码编辑独立滚动，无需同步 */ };
+    }
+}
+
+function updateCurrentPdfPage() {
+    var st = $('pdfContainer').scrollTop;
+    var cp = 1;
+    for (var p = 1; p <= pdfState.totalPages; p++) { if (pdfState.pageOffsets[p] !== undefined && st >= pdfState.pageOffsets[p]) cp = p; }
+    pdfState.currentPage = cp;
+    $('pdfPageInfo').textContent = '第 ' + cp + ' / ' + pdfState.totalPages + ' 页';
+}
+
+function bindPdfZoom() {
+    $('pdfZoomIn').onclick = function() { if (pdfState.renderScale < pdfState.MAX_SCALE) { pdfState.renderScale = Math.min(pdfState.renderScale + 0.25, pdfState.MAX_SCALE); rerenderPdf(); } };
+    $('pdfZoomOut').onclick = function() { if (pdfState.renderScale > pdfState.MIN_SCALE) { pdfState.renderScale = Math.max(pdfState.renderScale - 0.25, pdfState.MIN_SCALE); rerenderPdf(); } };
+    $('pdfFitWidth').onclick = function() {
+        if (!pdfState.pdfDoc) return;
+        var container = $('pdfContainer');
+        pdfState.pdfDoc.getPage(pdfState.currentPage).then(function(page) {
+            var v = page.getViewport({ scale: 1 });
+            pdfState.renderScale = (container.clientWidth - 24) / v.width;
+            rerenderPdf();
+        });
+    };
+    $('pdfZoomIn').disabled = pdfState.renderScale >= pdfState.MAX_SCALE;
+    $('pdfZoomOut').disabled = pdfState.renderScale <= pdfState.MIN_SCALE;
+}
+
+function rerenderPdf() {
+    if (!pdfState.pdfDoc || !currentMdContent) return;
+    var md = currentMdContent, url = API + '/upload-file/' + currentFilePath;
+    resetPdfState();
+    $('pdfContainer').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">重新渲染...</div></div>';
+    loadPdf(url, md);
+}
+
+// ================================================================
+// Markdown 编辑器
+// ================================================================
+function initEditor(content) {
+    if (mdeInstance) { try { mdeInstance.toTextArea(); } catch(e) {} mdeInstance = null; }
+    $('editorInner').innerHTML = '<textarea id="mdeTa" style="display:none"></textarea>';
+    var ta = $('mdeTa');
+    mdeInstance = new EasyMDE({ element: ta, initialValue: content || '', spellChecker: false, autofocus: false, sideBySideFullscreen: false, renderingConfig: { codeSyntaxHighlighting: true } });
+    mdeInstance.codemirror.on('change', function() {
+        if (_syncLock) return;
+        _syncLock = true;
+        var val = mdeInstance.value();
+        currentMdContent = val;
+        var pd = $('previewDoc');
+        if (pd) {
+            if (typeof marked !== 'undefined') {
+                try {
+                    pd.innerHTML = marked.parse(val);
+                } catch (e) {
+                    pd.innerHTML = '<pre style="white-space:pre-wrap;word-break:break-all;background:#fff8f8;border:1px solid #ffe0e0;padding:12px;border-radius:8px">' + esc(val) + '</pre>';
+                }
+            } else {
+                pd.innerHTML = '<pre>' + esc(val) + '</pre>';
+            }
+        }
+        _syncLock = false;
+    });
+
+    // 预览区域编辑 → 反向同步到 EasyMDE（预览 → 源码）
+    var pd = $('previewDoc');
+    if (pd) {
+        pd.addEventListener('input', function() {
+            if (_syncLock) return;
+            clearTimeout(_previewInputTimer2);
+            _previewInputTimer2 = setTimeout(function() {
+                _syncLock = true;
+                var td = getTurndown();
+                if (td && mdeInstance) {
+                    var newMd = td.turndown(pd.innerHTML);
+                    currentMdContent = newMd;
+                    mdeInstance.value(newMd);
+                }
+                _syncLock = false;
+            }, 300);
+        });
+    }
+    // 滚动同步：编辑区滚动 → 预览跟随
+    mdeInstance.codemirror.on('scroll', function() {
+        var cm = mdeInstance.codemirror;
+        var info = cm.getScrollInfo();
+        var maxSrc = info.height - info.clientHeight;
+        if (maxSrc <= 0) return;
+        var ratio = info.top / maxSrc;
+        var previewScroll = document.querySelector('.preview-scroll');
+        if (previewScroll) {
+            var maxPrv = previewScroll.scrollHeight - previewScroll.clientHeight;
+            previewScroll.scrollTop = ratio * maxPrv;
+        }
+    });
+    // 光标点击跳转同步：点击某行 → 预览跳到对应位置
+    mdeInstance.codemirror.on('cursorActivity', function() {
+        var cm = mdeInstance.codemirror;
+        var totalLines = cm.lineCount();
+        var cursorLine = cm.getCursor().line; // 0-based
+        var ratio = totalLines > 1 ? cursorLine / (totalLines - 1) : 0;
+        var previewScroll = document.querySelector('.preview-scroll');
+        if (previewScroll) {
+            var maxPrv = previewScroll.scrollHeight - previewScroll.clientHeight;
+            if (maxPrv > 0) previewScroll.scrollTop = ratio * maxPrv;
+        }
+    });
+}
+
+function resetLazyState() { lazyState.fullContent = ''; lazyState.parsedParts = []; lazyState.loadedChunks = 0; lazyState.isFullyLoaded = false; clearTimeout(lazyState.renderTimer); }
+
+// ================================================================
+// 保存/下载/刷新
+// ================================================================
+function doSave() {
+    if (!currentFileId) return;
+    // 优先从 PDF+MD 视图的 textarea 获取内容（如果有的话）
+    var ta = $('mdSourceTa');
+    var content = '';
+    if (ta && ta.value) {
+        content = ta.value;
+    } else if (mdeInstance) {
+        content = mdeInstance.value();
+    } else {
+        content = currentMdContent || '';
+    }
+    apiSave(currentFileId, content).then(function(data) {
+        if (data.success) {
+            toast('保存成功', 'ok');
+            var status = $('mdSaveStatus');
+            if (status) { status.textContent = '已保存 ' + new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'}); status.style.color = '#34a853'; }
+        } else {
+            toast('保存失败：' + (data.message || ''), 'err');
+        }
+    }).catch(function() { toast('保存失败', 'err'); });
+}
+$('btnSave').onclick = doSave;
+document.addEventListener('keydown', function(e) { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); doSave(); } });
+
+function downloadFile(fileId) { window.open(API + '/download/' + fileId, '_blank'); toast('正在下载...', 'ok'); }
+$('btnDownload').onclick = function() { if (currentFileId) downloadFile(currentFileId); };
+
+// ================================================================
+// 批量选择与导出
+// ================================================================
+var batchMode = false;
+var selectedIds = [];
+
+function toggleBatchMode() {
+    batchMode = !batchMode;
+    selectedIds = [];
+    var fl = $('fileList');
+    if (batchMode) {
+        fl.classList.add('batch-mode');
+        $('batchBar').classList.add('show');
+        $('batchToggle').textContent = '✅ 批量中';
+        $('batchToggle').style.color = '#764ba2';
+    } else {
+        fl.classList.remove('batch-mode');
+        $('batchBar').classList.remove('show');
+        $('batchToggle').textContent = '☑ 批量';
+        $('batchToggle').style.color = '';
+    }
+    updateBatchUI();
+    renderFileList();
+}
+
+function onCheckFile(fileId, checked) {
+    if (checked && selectedIds.indexOf(fileId) === -1) selectedIds.push(fileId);
+    if (!checked) selectedIds = selectedIds.filter(function(id) { return id !== fileId; });
+    updateBatchUI();
+    // 更新卡片样式
+    var card = $('fileList').querySelector('.file-card[data-id="' + fileId + '"]');
+    if (card) { if (checked) card.classList.add('checked'); else card.classList.remove('checked'); }
+}
+
+function updateBatchUI() {
+    var doneCount = 0;
+    selectedIds.forEach(function(id) {
+        var f = fileListData.find(function(ff) { return ff.id === id; });
+        if (f && f.status === 'done') doneCount++;
+    });
+    $('batchInfo').textContent = '已选 ' + selectedIds.length + ' 个' + (doneCount > 0 ? '（' + doneCount + ' 个可导出）' : '');
+    $('btnBatchExport').disabled = doneCount === 0;
+    // 同步全选按钮文字
+    var allIds = fileListData.map(function(f) { return f.id; });
+    if (selectedIds.length === allIds.length && allIds.length > 0) {
+        $('btnSelectAll').textContent = '☐ 取消全选';
+    } else {
+        $('btnSelectAll').textContent = '☑ 全选';
+    }
+}
+
+function batchExport() {
+    var doneIds = [];
+    selectedIds.forEach(function(id) {
+        var f = fileListData.find(function(ff) { return ff.id === id; });
+        if (f && f.status === 'done') doneIds.push(id);
+    });
+    if (doneIds.length === 0) { toast('没有可导出的文件', 'err'); return; }
+    toast('正在打包 ' + doneIds.length + ' 个文件...', 'ok');
+    // 用隐藏表单提交POST请求触发文件下载
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = API + '/download/batch';
+    form.target = '_blank';
+    form.style.display = 'none';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'data';
+    input.value = JSON.stringify({ file_ids: doneIds });
+    form.appendChild(input);
+    document.body.appendChild(form);
+    // 改用fetch下载
+    document.body.removeChild(form);
+    fetch(API + '/download/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_ids: doneIds })
+    }).then(function(resp) {
+        if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.message || '导出失败'); });
+        return resp.blob();
+    }).then(function(blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '批量导出.zip';
+        a.click();
+        URL.revokeObjectURL(url);
+        toast('打包下载完成！', 'ok');
+    }).catch(function(err) { toast(err.message || '导出失败', 'err'); });
+}
+
+function batchDelete() {
+    if (selectedIds.length === 0) { toast('没有选中任何文件', 'err'); return; }
+    pendingDeleteIds = selectedIds.slice();
+    $('delText').textContent = '确定要删除选中的 ' + selectedIds.length + ' 个文件吗？此操作不可恢复。';
+    $('delModal').style.display = 'flex';
+}
+
+function batchSelectAll() {
+    var allIds = fileListData.map(function(f) { return f.id; });
+    if (selectedIds.length === allIds.length) {
+        selectedIds = [];
+        $('btnSelectAll').textContent = '☑ 全选';
+    } else {
+        selectedIds = allIds.slice();
+        $('btnSelectAll').textContent = '☐ 取消全选';
+    }
+    updateBatchUI();
+    renderFileList();
+}
+
+// ================================================================
+// AI 分类（按 Excel 大纲）
+// ================================================================
+var _classifyTimer = null;
+function doClassifyExcel() {
+    if (!currentFileId) { toast('请先打开一个文件', 'err'); return; }
+    var btn = $('btnClassifyExcel');
+    btn.disabled = true;
+    btn.textContent = '🤖 分类中...';
+    toast('🤖 正在用 AI 分类，请稍候...', '');
+
+    fetch(API + '/kb/classify-excel/' + currentFileId, { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                toast('❌ ' + (data.message || '启动失败'), 'err');
+                btn.disabled = false;
+                btn.textContent = '🤖 AI分类';
+                return;
+            }
+            // 立即开始轮询状态
+            toast('⏳ 分类中，请稍候...', '');
+            pollClassifyStatus();
+        })
+        .catch(function(e) {
+            btn.disabled = false;
+            btn.textContent = '🤖 AI分类';
+            toast('❌ 启动失败：' + e, 'err');
+        });
+}
+
+function pollClassifyStatus() {
+    if (!currentFileId) return;
+    fetch(API + '/kb/classify-status/' + currentFileId)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.success) {
+                clearTimer();
+                return;
+            }
+            var btn = $('btnClassifyExcel');
+            if (data.status === 'running') {
+                // 继续轮询，每 3 秒查一次
+                _classifyTimer = setTimeout(pollClassifyStatus, 3000);
+            } else if (data.status === 'done') {
+                btn.disabled = false;
+                btn.textContent = '🤖 AI分类';
+                toast('✅ ' + data.message, 'ok');
+                // 刷新知识库树
+                if (currentFileId) loadKbTree(currentFileId);
+                clearTimer();
+            } else if (data.status === 'error') {
+                btn.disabled = false;
+                btn.textContent = '🤖 AI分类';
+                toast('❌ ' + data.message, 'err');
+                clearTimer();
+            }
+        })
+        .catch(function() { clearTimer(); });
+}
+
+function clearTimer() {
+    if (_classifyTimer) { clearTimeout(_classifyTimer); _classifyTimer = null; }
+}
+
+function refreshList() {
+    apiList().then(function(data) {
+        if (!data.success) return;
+        data.files.forEach(function(f) { var old = fileListData.find(function(o) { return o.id === f.id; }); if (old) f._pct = old._pct; });
+        fileListData = data.files;
+        renderFileList();
+        if (currentFileId) {
+            var exists = fileListData.some(function(f) { return f.id === currentFileId; });
+            if (!exists) { currentFileId = null; $('docWrap').style.display = 'none'; $('emptyState').style.display = 'flex'; }
+        }
+    }).catch(function() {});
+}
+$('btnRefresh').onclick = function() { refreshList(); toast('已刷新', 'ok', 1200); };
+
+// ================================================================
+// 轮询
+// =====
+// 轮询（优化版：只在有文件解析中时轮询，解析完自动停止）
+// ================================================================
+function stopPoll() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function startPoll() {
+    if (pollTimer) return;
+    pollTimer = setInterval(function() {
+        if (document.hidden) return;
+        apiList().then(function(data) {
+            if (!data.success) return;
+            var pc = 0;
+            data.files.forEach(function(f) {
+                var old = fileListData.find(function(o) { return o.id === f.id; });
+                if (old) { 
+                    old.status = f.status; 
+                    old.error_msg = f.error_msg; 
+                    old.output_path = f.output_path; 
+                }
+                if (f.status === 'parsing') pc++;
+            });
+            fileListData = data.files;
+            renderFileList();
+            updateHeaderProgress(pc);
+
+            // 文件解析完成后，自动加载内容、关闭加载态
+            if (currentFileId) {
+                var cur = fileListData.find(function(f) { return f.id === currentFileId; });
+                if (cur && cur.status === 'done') {
+                    if ($('pdfContainer').querySelector('.loading-wrap')) {
+                        loadPdfAndMd(currentFileId, cur);
+                    }
+                }
+                if (cur && cur.status === 'error') {
+                    showPdfError('文件解析失败：' + (cur.error_msg || '未知错误'));
+                }
+            }
+
+            // ✅ 没有文件在解析了，停止轮询
+            if (pc === 0) {
+                stopPoll();
+            }
+        }).catch(function() {});
+    }, 3000);
+
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopPoll();
+        } else {
+            // 回到页面时，检查是否需要继续轮询
+            var hasParsing = fileListData.some(function(f) { return f.status === 'parsing'; });
+            if (hasParsing && !pollTimer) startPoll();
+        }
+    });
+}
+
+function updateHeaderProgress(count) {
+    var el = $('headerProgress');
+    // ✅ 修复：解析数量为0时，强制隐藏进度条
+    if (count > 0) { 
+        el.style.display = 'flex'; 
+        $('headerProgressText').textContent = '正在解析 ' + count + ' 个文件...'; 
+    } else { 
+        el.style.display = 'none'; 
+        // 清空进度条宽度，避免残留
+        $('headerBarFill').style.width = '0%';
+    }
+}
+
+// ================================================================
+// 上传
+// ================================================================
+function setupUpload() {
+    var zone = $('uploadZone');
+    var input = $('fileInput');
+    zone.onclick = function() { input.click(); };
+    input.onchange = function(e) { Array.from(e.target.files).forEach(uploadOne); input.value = ''; };
+    zone.ondragover = function(e) { e.preventDefault(); zone.classList.add('dragover'); };
+    zone.ondragleave = function(e) { e.preventDefault(); zone.classList.remove('dragover'); };
+    zone.ondrop = function(e) { e.preventDefault(); zone.classList.remove('dragover'); Array.from(e.dataTransfer.files).forEach(uploadOne); };
+}
+
+function uploadOne(file) {
+    var ext = (file.name.split('.').pop() || '').toLowerCase();
+    var ok = ['pdf','docx','doc','xlsx','xls','png','jpg','jpeg','gif','bmp','md','txt','csv'];
+    if (!ok.includes(ext)) { toast('不支持的格式：' + ext, 'err'); return; }
+    if (file.size > 50 * 1048576) { toast('文件超过 50MB', 'err'); return; }
+    var prog = $('upProgress'), fill = $('upFill'), pct = $('upPct');
+    prog.style.display = 'block'; fill.style.width = '0%'; pct.textContent = '0%';
+    apiUpload(file, function(n) { fill.style.width = n + '%'; pct.textContent = n + '%'; }).then(function(data) {
+        toast(data.duplicate ? '此文件已上传过：' + file.name : '上传成功：' + file.name, data.duplicate ? '' : 'ok');
+        prog.style.display = 'none';
+        refreshList();
+        startPoll();
+    }).catch(function() { toast('上传失败', 'err'); prog.style.display = 'none'; });
+}
+
+// ================================================================
+// 删除
+// ================================================================
+function askDelete(fileId) { pendingDeleteIds = [fileId]; $('delText').textContent = '确定要删除此文件吗？此操作不可恢复。'; $('delModal').style.display = 'flex'; }
+$('btnCancelDel').onclick = function() { $('delModal').style.display = 'none'; pendingDeleteIds = []; };
+$('btnConfirmDel').onclick = function() {
+    $('delModal').style.display = 'none';
+    if (!pendingDeleteIds.length) return;
+    if (pendingDeleteIds.indexOf(currentFileId) !== -1) { currentFileId = null; if (mdeInstance) { try { mdeInstance.toTextArea(); } catch(e) {} mdeInstance = null; } $('docWrap').style.display = 'none'; $('emptyState').style.display = 'flex'; }
+    apiDelete(pendingDeleteIds).then(function(data) { toast(data.success ? '删除成功' : '删除失败', data.success ? 'ok' : 'err'); pendingDeleteIds = []; if (batchMode) toggleBatchMode(); refreshList(); }).catch(function() { toast('删除失败', 'err'); });
+};
+
+// ================================================================
+// 知识库 - 文档列表加载
+// ================================================================
+function loadKbDocList() {
+    apiKbList().then(function(data) {
+        if (!data.success) return;
+        kbState.docs = data.documents || [];
+        renderKbDocList();
+    }).catch(function() {});
+}
+
+function renderKbDocList() {
+    var container = $('kbDocItems');
+    if (kbState.docs.length === 0) {
+        container.innerHTML = '<div style="font-size:12px;color:#ccc;padding:8px 4px">暂无文档，请先上传并解析文件</div>';
+        return;
+    }
+    container.innerHTML = kbState.docs.map(function(doc) {
+        var isActive = doc.id === kbState.currentDocId;
+        return '<div class="kb-doc-item' + (isActive ? ' active' : '') + '" data-id="' + doc.id + '" onclick="selectKbDoc(' + doc.id + ')">' + esc(doc.original_name) + '</div>';
+    }).join('');
+}
+
+function selectKbDoc(fileId) {
+    kbState.currentDocId = fileId;
+    kbState.selectedNode = null;
+    renderKbDocList();
+    loadKbTree(fileId);
+}
+
+// ================================================================
+// 知识库 - 树结构
+// ================================================================
+function loadKbTree(fileId) {
+    $('kbTreeNodes').innerHTML = '<div class="loading-wrap"><div class="loading-ring"></div><div class="loading-msg">加载结构...</div></div>';
+    apiKbTree(fileId).then(function(data) {
+        if (!data.success) { $('kbTreeNodes').innerHTML = '<div style="font-size:12px;color:#e53e3e;padding:8px">加载失败：' + esc(data.message || '') + '</div>'; return; }
+        kbState.currentTree = data.tree || {};
+        kbState.expandedNodes = new Set();
+        // 默认展开第一层
+        if (kbState.currentTree.children && kbState.currentTree.children.length > 0) {
+            kbState.currentTree.children.forEach(function(c) { kbState.expandedNodes.add(c.id); });
+        }
+        renderKbTree();
+        $('kbContentEmpty').style.display = 'flex';
+        $('kbContentHeader').style.display = 'none';
+        $('kbContentBody').innerHTML = '<div class="kb-content-empty"><div class="kb-content-empty-icon">📖</div><div class="empty-text">从左侧树结构中选择节点查看内容</div></div>';
+    }).catch(function() { $('kbTreeNodes').innerHTML = '<div style="font-size:12px;color:#e53e3e;padding:8px">加载失败，请检查后端服务</div>'; });
+}
+
+function renderKbTree() {
+    var tree = kbState.currentTree;
+    if (!tree) return;
+    var container = $('kbTreeNodes');
+    kbState.allTreeNodes = [];
+    var html = renderTreeNodes([tree], 0);
+    container.innerHTML = html;
+    kbState.allTreeNodes = container.querySelectorAll('.tree-node');
+}
+
+function renderTreeNodes(nodes, level) {
+    return nodes.map(function(node) {
+        var hasChildren = node.children && node.children.length > 0;
+        var isExpanded = kbState.expandedNodes.has(node.id);
+        var isSelected = kbState.selectedNode && kbState.selectedNode.id === node.id;
+        var typeIcon = node.type === 'root' ? '📁' : node.type === 'page' ? '📄' : node.type === 'heading' ? '📋' : '📃';
+        var badge = node.page_range ? '<span class="tree-badge">' + node.page_range + '</span>' : '';
+        var toggle = hasChildren ? '<span class="tree-toggle' + (isExpanded ? ' expanded' : '') + '">▶</span>' : '<span class="tree-toggle empty"></span>';
+        kbState.allTreeNodes.push(node);
+        var inner = '<div class="tree-node-inner' + (isSelected ? ' active' : '') + '" data-id="' + node.id + '" data-level="' + level + '" onclick="selectKbNode(this, \'' + node.id + '\')">' +
+            toggle + '<span class="tree-icon">' + typeIcon + '</span><span class="tree-title">' + esc(node.title || '') + '</span>' + badge + '</div>';
+        var childrenHtml = '';
+        if (hasChildren && isExpanded) {
+            childrenHtml = '<div class="tree-children">' + renderTreeNodes(node.children, level + 1) + '</div>';
+        }
+        return '<div class="tree-node" data-level="' + level + '">' + inner + childrenHtml + '</div>';
+    }).join('');
+}
+
+function selectKbNode(el, nodeId) {
+    // 找到节点数据
+    var node = findNodeById(kbState.currentTree, nodeId);
+    if (!node) return;
+    kbState.selectedNode = node;
+    // 更新高亮
+    document.querySelectorAll('.tree-node-inner').forEach(function(e) { e.classList.remove('active'); });
+    el.classList.add('active');
+    // 显示内容
+    showKbNodeContent(node);
+}
+
+function findNodeById(tree, id) {
+    if (!tree) return null;
+    if (tree.id === id) return tree;
+    if (tree.children) {
+        for (var i = 0; i < tree.children.length; i++) {
+            var found = findNodeById(tree.children[i], id);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function showKbNodeContent(node) {
+    $('kbContentEmpty').style.display = 'none';
+    $('kbContentHeader').style.display = 'flex';
+    $('kbContentTitle').textContent = node.title || '';
+    $('kbContentMeta').textContent = node.page_range ? '📄 ' + node.page_range : '';
+    var content = node.content_preview || node.summary || '';
+    var html;
+    if (content) {
+        // 如果是 Markdown 格式
+        if (typeof marked !== 'undefined') {
+            try {
+                html = marked.parse(content);
+            } catch (e) {
+                // 渲染失败时显示纯文本
+                html = '<p style="white-space:pre-wrap;word-break:break-all">' + esc(content) + '</p>';
+            }
+        } else {
+            html = '<p>' + esc(content).replace(/\n/g, '<br>') + '</p>';
+        }
+    } else {
+        html = '<p style="color:#ccc;font-size:13px">此节点暂无内容摘要</p>';
+    }
+    $('kbContentBody').innerHTML = '<div class="kb-content-text">' + html + '</div>';
+}
+
+function treeExpandAll() {
+    var tree = kbState.currentTree;
+    if (!tree) return;
+    collectAllNodeIds(tree);
+    renderKbTree();
+}
+
+function treeCollapseAll() {
+    kbState.expandedNodes = new Set();
+    renderKbTree();
+}
+
+function collectAllNodeIds(node) {
+    if (node.children) {
+        node.children.forEach(function(c) { kbState.expandedNodes.add(c.id); collectAllNodeIds(c); });
+    }
+}
+
+function filterTree() {
+    var kw = $('kbTreeSearch').value.trim().toLowerCase();
+    var nodes = document.querySelectorAll('.tree-node');
+    nodes.forEach(function(node) {
+        var inner = node.querySelector('.tree-node-inner');
+        if (!inner) return;
+        var title = inner.querySelector('.tree-title');
+        var text = title ? title.textContent.toLowerCase() : '';
+        var match = !kw || text.includes(kw);
+        node.style.display = match ? '' : 'none';
+    });
+}
+
+// ================================================================
+// 知识库 - 搜索
+// ================================================================
+function doKbSearch() {
+    var query = $('kbSearchInput').value.trim();
+    if (!query) return;
+    var fileId = kbState.currentDocId;
+    apiKbSearch(query, fileId).then(function(data) {
+        if (!data.success) { toast('搜索失败：' + (data.message || ''), 'err'); return; }
+        kbState.searchResults = data.results || [];
+        if (kbState.searchResults.length === 0) {
+            toast('未找到相关结果', '');
+            return;
+        }
+        // 如果在知识库视图，显示结果
+        if (currentView === 'knowledge') {
+            showSearchResults(kbState.searchResults, query);
+        }
+        toast('找到 ' + kbState.searchResults.length + ' 个相关结果', 'ok');
+    }).catch(function() { toast('搜索失败', 'err'); });
+}
+
+function showSearchResults(results, query) {
+    var html = results.map(function(r) {
+        var score = Math.round((r.score || 0) * 100);
+        return '<div class="kb-answer-item" onclick="jumpToKbDoc(' + r.file_id + ')">' +
+            '<div class="kb-answer-q">📄 ' + esc(r.file_name || '') + ' · ' + esc(r.page_range || '') + ' · 相关度 ' + score + '%</div>' +
+            '<div class="kb-answer-a">' + esc(r.content_preview || '') + '</div>' +
+            '</div>';
+    }).join('');
+    $('kbQaAnswers').innerHTML = html;
+}
+
+function jumpToKbDoc(fileId) {
+    selectKbDoc(fileId);
+}
+
+// ================================================================
+// 知识库 - 问答
+// ================================================================
+function doKbAsk() {
+    var query = $('kbQaInput').value.trim();
+    if (!query) { toast('请输入问题', ''); return; }
+    var btn = $('kbQaBtn');
+    var input = $('kbQaInput');
+    btn.disabled = true;
+    input.disabled = true;
+    btn.textContent = '思考中...';
+
+    apiKbAsk(query, kbState.currentDocId).then(function(data) {
+        btn.disabled = false;
+        input.disabled = false;
+        btn.textContent = '提问';
+        if (!data.success) { toast('问答失败：' + (data.message || ''), 'err'); return; }
+
+        var answer = data.answer;
+        var sources = data.sources || [];
+
+        // 显示问答历史
+        var answersEl = $('kbQaAnswers');
+        var qItem = document.createElement('div');
+        qItem.className = 'kb-answer-item';
+        var sourcesHtml = sources.length > 0 ? '<div class="kb-answer-sources">' + sources.map(function(s) {
+            return '<div class="kb-source-item"><span>📄</span><span class="kb-source-title">' + esc(s.title || '') + '</span><span> · ' + esc(s.file_name || '') + '</span></div>';
+        }).join('') + '</div>' : '';
+
+        if (answer) {
+            qItem.innerHTML = '<div class="kb-answer-q">❓ ' + esc(query) + '</div><div class="kb-answer-a">' + esc(answer) + '</div>' + sourcesHtml;
+        } else if (data.llm_not_configured) {
+            qItem.innerHTML = '<div class="kb-answer-q">❓ ' + esc(query) + '</div><div class="kb-answer-a" style="color:#f5a623">⚠️ LLM 未配置，请在设置中配置 API Key 开启智能问答<br><br>以下为关键词检索结果：</div>' + sourcesHtml;
+        } else {
+            qItem.innerHTML = '<div class="kb-answer-q">❓ ' + esc(query) + '</div><div class="kb-answer-a" style="color:#999">未找到相关内容</div>';
+        }
+        answersEl.insertBefore(qItem, answersEl.firstChild);
+        input.value = '';
+    }).catch(function() {
+        btn.disabled = false;
+        input.disabled = false;
+        btn.textContent = '提问';
+        toast('问答失败', 'err');
+    });
+}
+
+// ================================================================
+// 合成书
+// ================================================================
+var _compileDocxPath = '';
+
+function openCompileBookModal() {
+    _compileDocxPath = '';
+    $('compileBookModal').style.display = 'flex';
+    $('bookCompileStatus').textContent = '';
+    $('bookDetectInfo').textContent = '正在检测大纲文件...';
+    $('btnStartCompile').disabled = true;
+
+    fetch(API + '/list-docx').then(function(r){ return r.json(); }).then(function(data) {
+        if (!data.success || !data.files.length) {
+            $('bookDetectInfo').innerHTML = '⚠️ 未找到 .docx 大纲文件，请将 Word 目录文件放到 <b>vip/</b> 根目录下再试。';
+            return;
+        }
+        var f = data.files[0];
+        _compileDocxPath = f.path;
+        var doneCount = fileListData ? fileListData.filter(function(x){ return x.status === 'done'; }).length : 0;
+        $('bookDetectInfo').innerHTML =
+            '📄 大纲：<b>' + esc(f.filename) + '</b>' +
+            (data.files.length > 1 ? '（共 ' + data.files.length + ' 个，用第一个）' : '') +
+            '<br>📁 合并 <b>' + doneCount + '</b> 个已完成文件，按大纲分类';
+        $('btnStartCompile').disabled = false;
+    }).catch(function() {
+        $('bookDetectInfo').textContent = '⚠️ 检测失败，请确认后端服务正在运行。';
+    });
+}
+
+function closeCompileBookModal() {
+    $('compileBookModal').style.display = 'none';
+}
+
+// 合成书下载：用 fetch+blob 方式强制下载 .md 文件，避免浏览器把md当html
+var _bookDownloadUrl = '';
+var _bookDownloadName = '';
+function downloadBookFile() {
+    if (!_bookDownloadUrl) { toast('没有可下载的文件', 'error'); return; }
+    fetch(_bookDownloadUrl).then(function(r) {
+        if (!r.ok) throw new Error('下载失败，状态码：' + r.status);
+        return r.blob();
+    }).then(function(blob) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = _bookDownloadName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    }).catch(function(e) {
+        toast('下载失败：' + e.message, 'error');
+    });
+}
+
+function startCompileBook() {
+    var btn = $('btnStartCompile');
+    btn.disabled = true;
+    btn.textContent = '⏳ 合成中...';
+    $('bookCompileStatus').textContent = '正在分析大纲并匹配内容，请稍候...';
+    $('bookCompileStatus').style.color = '#667eea';
+
+    fetch(API + '/compile-book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docx_path: _compileDocxPath || null })
+    }).then(function(r){ return r.json(); }).then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '🚀 一键合成';
+        if (!data.success) {
+            $('bookCompileStatus').textContent = '失败：' + (data.message || '未知错误');
+            $('bookCompileStatus').style.color = '#e53e3e';
+            return;
+        }
+        // 用书名作为下载文件名，确保扩展名是 .md
+        var bookFileName = (data.book_title || '合成书') + '.md';
+        // 把下载URL和文件名存到全局变量，避免中文编码问题
+        _bookDownloadUrl = API + '/download-book/' + encodeURIComponent(data.download_url.split('/').pop());
+        _bookDownloadName = bookFileName;
+        // 保存合成书的文件名（后端实际文件名），用于加载到书籍视图
+        _compiledBookFilename = data.download_url.split('/').pop();
+        $('bookCompileStatus').innerHTML =
+            '✅ 完成！' + data.total_sections + ' 个章节，匹配 ' + data.matched_count + ' 个文件。' +
+            ' <a href="javascript:void(0)" onclick="downloadBookFile()" style="color:#667eea;font-weight:700">📥 立即下载</a>' +
+            ' · <a href="javascript:void(0)" onclick="openBookView()" style="color:#667eea;font-weight:700">📖 在线查看</a>';
+        $('bookCompileStatus').style.color = '#34a853';
+        toast('书籍合成成功！', 'ok');
+    }).catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = '🚀 一键合成';
+        $('bookCompileStatus').textContent = '请求失败：' + e.message;
+        $('bookCompileStatus').style.color = '#e53e3e';
+    });
+}
+
+// ================================================================
+// 设置面板
+// ================================================================
+function openSettingsModal() {
+    $('settingsModal').style.display = 'flex';
+    $('llmTestResult').innerHTML = '';
+    apiKbConfig().then(function(data) {
+        if (!data.success) return;
+        var cfg = data.config || {};
+        // API Key 不回填，显示为空，让用户自己填新值
+        $('cfgApiKey').value = '';
+        $('cfgApiBase').value = cfg.api_base || 'https://api.deepseek.com';
+        $('cfgModel').value = cfg.model || 'deepseek-chat';
+        $('cfgTemp').value = cfg.temperature || 0.7;
+        $('cfgToggle').classList.toggle('on', cfg.enabled);
+        updateLlmStatus(cfg.enabled);
+    }).catch(function() {});
+}
+
+function closeSettingsModal() { $('settingsModal').style.display = 'none'; }
+
+function toggleLlmEnabled() {
+    var toggle = $('cfgToggle');
+    toggle.classList.toggle('on');
+}
+
+function updateLlmStatus(enabled) {
+    var dot = $('llmStatusDot');
+    var text = $('llmStatusText');
+    var badge = $('llmBadge');
+    if (enabled) { dot.className = 'llm-status-dot ok'; text.textContent = '已启用'; badge.textContent = 'LLM 已启用'; badge.className = 'kb-qa-badge'; }
+    else { dot.className = 'llm-status-dot off'; text.textContent = '未启用'; badge.textContent = 'LLM 未配置'; badge.className = 'kb-qa-badge off'; }
+}
+
+function saveLlmConfig() {
+    var apiKey = $('cfgApiKey').value.trim();
+    var apiBase = $('cfgApiBase').value.trim() || 'https://api.deepseek.com';
+    var model = $('cfgModel').value.trim() || 'deepseek-chat';
+    var temp = parseFloat($('cfgTemp').value) || 0.7;
+    var enabled = $('cfgToggle').classList.contains('on');
+    // 如果 API Key 是脱敏格式（包含 ****），不更新 Key，保留原有值
+    var cfg = { api_base: apiBase, model: model, temperature: temp, enabled: enabled };
+    if (!apiKey || !apiKey.includes('****')) {
+        cfg.api_key = apiKey;
+    }
+    apiKbSaveConfig(cfg).then(function(data) {
+        if (data.success) { toast('配置已保存', 'ok'); closeSettingsModal(); updateLlmStatus(enabled); }
+        else toast('保存失败：' + (data.message || ''), 'err');
+    }).catch(function() { toast('保存失败', 'err'); });
+}
+
+function testLlm() {
+    $('llmTestResult').innerHTML = '<div class="llm-test-result" style="background:rgba(102,126,234,0.08);color:#667eea;border-color:rgba(102,126,234,0.15)">🔗 测试连接中...</div>';
+    // 直接用后端保存的配置来测试，不依赖输入框的值
+    apiKbTestLlm({}).then(function(data) {
+        if (data.success) { $('llmTestResult').innerHTML = '<div class="llm-test-result ok">✅ ' + esc(data.message || '连接成功') + '</div>'; }
+        else { $('llmTestResult').innerHTML = '<div class="llm-test-result err">❌ ' + esc(data.message || '连接失败') + '</div>'; }
+    }).catch(function(e) { $('llmTestResult').innerHTML = '<div class="llm-test-result err">❌ 测试失败：' + esc(String(e)) + '</div>'; });
+}
+
+// ================================================================
+// 可拖拽分栏功能
+// ================================================================
+var splitState = { ratio: 0.5, isDragging: false, pdfHidden: false, mdHidden: false };
+
+function startSplitDrag(e) {
+    e.preventDefault();
+    splitState.isDragging = true;
+    var divider = $('splitDivider');
+    divider.classList.add('dragging');
+    document.addEventListener('mousemove', onSplitDrag);
+    document.addEventListener('mouseup', stopSplitDrag);
+}
+
+function onSplitDrag(e) {
+    if (!splitState.isDragging) return;
+    var container = $('splitContainer');
+    var rect = container.getBoundingClientRect();
+    var x = e.clientX - rect.left;
+    var ratio = x / rect.width;
+    ratio = Math.max(0.15, Math.min(0.85, ratio));
+    applySplitRatio(ratio);
+}
+
+function stopSplitDrag() {
+    if (!splitState.isDragging) return;
+    splitState.isDragging = false;
+    var divider = $('splitDivider');
+    divider.classList.remove('dragging');
+    document.removeEventListener('mousemove', onSplitDrag);
+    document.removeEventListener('mouseup', stopSplitDrag);
+}
+
+function applySplitRatio(ratio) {
+    splitState.ratio = ratio;
+    var pdf = $('pdfPanel');
+    var md = $('mdPanel');
+    if (pdf && md) {
+        pdf.style.width = (ratio * 100).toFixed(1) + '%';
+        md.style.width = ((1 - ratio) * 100).toFixed(1) + '%';
+    }
+}
+
+function resetSplitToHalf() {
+    applySplitRatio(0.5);
+}
+
+// 双击分隔条：在 50/50 和 100% PDF 之间切换
+$('splitDivider').addEventListener('dblclick', function() {
+    if (splitState.ratio > 0.75) {
+        // 当前 PDF 很宽，恢复到 50/50
+        applySplitRatio(0.5);
+    } else {
+        // 最大化 PDF 面板
+        applySplitRatio(0.75);
+    }
+});
+
+// ================================================================
+// 收起/展开面板
+// ================================================================
+function togglePdfPanel() {
+    var pdf = $('pdfPanel');
+    var md = $('mdPanel');
+    var divider = $('splitDivider');
+    var btn = $('pdfToggleBtn');
+    if (splitState.pdfHidden) {
+        // 展开 PDF
+        splitState.pdfHidden = false;
+        pdf.classList.remove('hidden-panel');
+        divider.classList.remove('hidden');
+        md.style.width = ((1 - splitState.ratio) * 100).toFixed(1) + '%';
+        btn.classList.add('active');
+        btn.textContent = '◀';
+    } else {
+        // 收起 PDF
+        splitState.pdfHidden = true;
+        pdf.classList.add('hidden-panel');
+        pdf.style.width = '';
+        divider.classList.add('hidden');
+        md.style.width = '100%';
+        btn.classList.remove('active');
+        btn.textContent = '▶';
+    }
+}
+
+function toggleMdPanel() {
+    var pdf = $('pdfPanel');
+    var md = $('mdPanel');
+    var divider = $('splitDivider');
+    var btn = $('mdToggleBtn');
+    if (splitState.mdHidden) {
+        // 展开 MD
+        splitState.mdHidden = false;
+        md.classList.remove('hidden-panel');
+        divider.classList.remove('md-hidden');
+        pdf.style.width = (splitState.ratio * 100).toFixed(1) + '%';
+        btn.textContent = '▶';
+    } else {
+        // 收起 MD
+        splitState.mdHidden = true;
+        md.classList.add('hidden-panel');
+        md.style.width = '';
+        divider.classList.add('md-hidden');
+        pdf.style.width = '100%';
+        btn.textContent = '◀';
+    }
+}
+
+// 初始化分栏宽度
+function initSplitLayout() {
+    var pdf = $('pdfPanel');
+    var md = $('mdPanel');
+    if (pdf && md) {
+        pdf.style.width = '50%';
+        md.style.width = '50%';
+        splitState.ratio = 0.5;
+    }
+}
+
+// ================================================================
+// 书籍视图 - Notion 风格拖拽块编辑
+// ================================================================
+var _bookListLoaded = false;   // 是否已加载过书籍列表
+var _currentBookFilename = ''; // 当前打开的书籍文件名
+var _compiledBookFilename = ''; // 最近一次合成的书籍文件名
+var _bookBlocks = [];          // 当前书籍的所有块数据
+var _bookDirty = false;        // 是否有未保存的修改
+var _bookMetaMap = {};         // 书籍元信息（filename -> {size, modified}）
+// 书籍体积阈值（过大时默认不渲染块编辑器，避免页面卡死）
+var BOOK_SAFE_SIZE = 2 * 1024 * 1024;   // 2MB
+var BOOK_HARD_SIZE = 8 * 1024 * 1024;   // 8MB（强烈不建议块渲染）
+
+/**
+ * 打开书籍视图（从合成弹窗点击"在线查看"触发）
+ */
+function openBookView() {
+    closeCompileBookModal();
+    // 显示书籍按钮
+    $('btnBook').style.display = '';
+    // 显示文档容器（如果当前是空状态）
+    $('docWrap').style.display = 'flex';
+    $('emptyState').style.display = 'none';
+    switchView('book');
+    if (_compiledBookFilename) {
+        loadBookContent(_compiledBookFilename);
+    }
+}
+
+/**
+ * 加载书籍列表（填充下拉选项）
+ */
+function loadBookList() {
+    fetch(API + '/list-books').then(function(r){ return r.json(); }).then(function(data) {
+        _bookListLoaded = true;
+        if (!data.success || !data.books || !data.books.length) {
+            $('bookSelect').style.display = 'none';
+            $('btnBook').style.display = 'none';
+            return;
+        }
+        // 记录书籍元信息（大小等）
+        _bookMetaMap = {};
+        data.books.forEach(function(b) { _bookMetaMap[b.filename] = b; });
+        // 有合成书——显示书籍按钮
+        $('btnBook').style.display = '';
+        var sel = $('bookSelect');
+        sel.innerHTML = data.books.map(function(b) {
+            return '<option value="' + esc(b.filename) + '">' + esc(b.filename.replace('.md','')) + '</option>';
+        }).join('');
+        sel.style.display = data.books.length > 1 ? '' : 'none';
+    }).catch(function() { _bookListLoaded = true; });
+}
+
+/**
+ * 加载指定书籍的 Markdown 内容，解析成 blocks 并渲染
+ */
+function loadBookContent(filename, mode) {
+    if (!filename) return;
+    mode = mode || 'auto';
+    _currentBookFilename = filename;
+    $('bookViewTitle').textContent = '📖 ' + filename.replace('.md', '');
+    $('bookBlockCount').textContent = '加载中...';
+    $('bookPage').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">加载书籍内容...</div></div>';
+
+    var meta = _bookMetaMap[filename] || {};
+    var size = meta.size || 0;
+    if (mode === 'auto' && size > BOOK_SAFE_SIZE) {
+        renderBookLargeTip(filename, size);
+        return;
+    }
+
+    if (mode === 'light') {
+        loadBookContentLight(filename, size);
+        return;
+    }
+
+    loadBookContentBlock(filename);
+}
+
+// 大文件提示（避免浏览器卡死）
+function renderBookLargeTip(filename, size) {
+    var sizeText = (typeof fmtSize === 'function') ? fmtSize(size) : (Math.round(size / 1024 / 1024 * 10) / 10 + 'MB');
+    var warnText = size > BOOK_HARD_SIZE ? '⚠️ 文件非常大，强烈不建议块渲染，会导致页面卡死。' : '文件较大，建议使用轻量预览或直接下载。';
+    var fn = JSON.stringify(filename);
+    $('bookBlockCount').textContent = '大文件保护模式';
+    $('bookPage').innerHTML =
+        '<div class="kb-content-empty">' +
+            '<div class="kb-content-empty-icon">🧱</div>' +
+            '<div class="empty-text">' + warnText + '<br>文件大小：' + esc(sizeText) + '</div>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px">' +
+                '<button class="btn btn-primary btn-sm" onclick="loadBookContent(' + fn + ', \'light\')">⚡ 轻量预览</button>' +
+                '<button class="btn btn-ghost btn-sm" onclick="loadBookContent(' + fn + ', \'block\')">🧱 强制块渲染</button>' +
+                '<button class="btn btn-ghost btn-sm" onclick="downloadCurrentBook()">📥 下载</button>' +
+            '</div>' +
+        '</div>';
+}
+
+// 轻量预览（不做块渲染，避免浏览器卡死）
+function loadBookContentLight(filename, size) {
+    $('bookBlockCount').textContent = '轻量预览';
+    $('bookPage').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">加载书籍内容...</div></div>';
+
+    fetch(API + '/download-book/' + encodeURIComponent(filename))
+    .then(function(r){ if (!r.ok) throw new Error('加载失败'); return r.text(); })
+    .then(function(text) {
+        _bookDirty = false;
+        renderBookLightPreview(text, size);
+    })
+    .catch(function(e) {
+        $('bookPage').innerHTML = '<div class="kb-content-empty"><div class="kb-content-empty-icon">⚠️</div><div class="empty-text">请求失败：' + esc(e.message) + '</div></div>';
+    });
+}
+
+// 块渲染（可能较慢）
+function loadBookContentBlock(filename) {
+    $('bookBlockCount').textContent = '加载中...';
+    $('bookPage').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">加载书籍内容...</div></div>';
+
+    fetch(API + '/book-content/' + encodeURIComponent(filename))
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+        if (!data.success) {
+            $('bookPage').innerHTML = '<div class="kb-content-empty"><div class="kb-content-empty-icon">⚠️</div><div class="empty-text">' + esc(data.message || '加载失败') + '</div></div>';
+            return;
+        }
+        // 解析 Markdown → Blocks
+        _bookBlocks = parseMdToBlocks(data.content);
+        _bookDirty = false;
+        renderBookBlocks();
+    })
+    .catch(function(e) {
+        $('bookPage').innerHTML = '<div class="kb-content-empty"><div class="kb-content-empty-icon">⚠️</div><div class="empty-text">请求失败：' + esc(e.message) + '</div></div>';
+    });
+}
+
+function renderBookLightPreview(text, size) {
+    var page = $('bookPage');
+    page.innerHTML = '';
+
+    var info = document.createElement('div');
+    info.style.fontSize = '12px';
+    info.style.color = '#888';
+    info.style.margin = '0 0 10px 0';
+    var sizeText = (typeof fmtSize === 'function') ? fmtSize(size || text.length) : (Math.round((size || text.length) / 1024 / 1024 * 10) / 10 + 'MB');
+    info.textContent = '轻量预览（不渲染块） · 大小：' + sizeText;
+    page.appendChild(info);
+
+    var pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.wordBreak = 'break-word';
+    pre.style.background = '#fff';
+    pre.style.border = '1px solid rgba(102,126,234,0.12)';
+    pre.style.borderRadius = '8px';
+    pre.style.padding = '14px 16px';
+    pre.style.fontSize = '12px';
+    pre.style.lineHeight = '1.7';
+    pre.textContent = text || '';
+    page.appendChild(pre);
+}
+
+/**
+ * 将 Markdown 文本解析成块数组
+ * 每个块：{ id, type, raw, html }
+ *   type: h1/h2/h3/h4/h5/h6/blockquote/code/table/list/hr/p/empty
+ *   raw: 原始 Markdown 文本
+ *   html: 渲染后的 HTML
+ */
+function parseMdToBlocks(mdText) {
+    var lines = mdText.split('\n');
+    var blocks = [];
+    var blockId = 0;
+    var i = 0;
+    while (i < lines.length) {
+        var line = lines[i];
+        // --- 代码块 ---
+        if (/^```/.test(line)) {
+            var codeLines = [line];
+            i++;
+            while (i < lines.length && !/^```/.test(lines[i])) {
+                codeLines.push(lines[i]);
+                i++;
+            }
+            if (i < lines.length) { codeLines.push(lines[i]); i++; }
+            var codeRaw = codeLines.join('\n');
+            blocks.push({ id: blockId++, type: 'code', raw: codeRaw, html: '<pre><code>' + esc(codeLines.slice(1, -1).join('\n')) + '</code></pre>' });
+            continue;
+        }
+        // --- 表格 ---
+        if (/^\|/.test(line) && i + 1 < lines.length && /^\|[\s\-:]+\|/.test(lines[i+1])) {
+            var tableLines = [];
+            while (i < lines.length && /^\|/.test(lines[i])) {
+                tableLines.push(lines[i]);
+                i++;
+            }
+            var tableRaw = tableLines.join('\n');
+            blocks.push({ id: blockId++, type: 'table', raw: tableRaw, html: marked.parse(tableRaw) });
+            continue;
+        }
+        // --- 分隔线 ---
+        if (/^(---|\*\*\*|___)\s*$/.test(line.trim())) {
+            blocks.push({ id: blockId++, type: 'hr', raw: line, html: '<hr>' });
+            i++; continue;
+        }
+        // --- 标题 ---
+        var headMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (headMatch) {
+            var level = headMatch[1].length;
+            var text = headMatch[2];
+            blocks.push({ id: blockId++, type: 'h' + level, raw: line, html: '<span>' + esc(text) + '</span>' });
+            i++; continue;
+        }
+        // --- 引用 ---
+        if (/^>\s/.test(line)) {
+            var quoteLines = [];
+            while (i < lines.length && /^>\s?/.test(lines[i])) {
+                quoteLines.push(lines[i].replace(/^>\s?/, ''));
+                i++;
+            }
+            var quoteRaw = quoteLines.map(function(l){ return '> ' + l; }).join('\n');
+            blocks.push({ id: blockId++, type: 'blockquote', raw: quoteRaw, html: marked.parse(quoteLines.join('\n')) });
+            continue;
+        }
+        // --- 无序/有序列表 ---
+        if (/^(\s*[-*+]|\s*\d+\.)\s/.test(line)) {
+            var listLines = [];
+            while (i < lines.length && (/^(\s*[-*+]|\s*\d+\.)\s/.test(lines[i]) || /^\s{2,}/.test(lines[i]))) {
+                listLines.push(lines[i]);
+                i++;
+            }
+            var listRaw = listLines.join('\n');
+            blocks.push({ id: blockId++, type: 'list', raw: listRaw, html: marked.parse(listRaw) });
+            continue;
+        }
+        // --- 空行 ---
+        if (line.trim() === '') {
+            blocks.push({ id: blockId++, type: 'empty', raw: '', html: '' });
+            i++; continue;
+        }
+        // --- 普通段落（合并连续非空行） ---
+        var paraLines = [];
+        while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,6}\s|```|>\s|\||---|\*\*\*|___|(\s*[-*+]|\s*\d+\.)\s)/.test(lines[i])) {
+            paraLines.push(lines[i]);
+            i++;
+        }
+        var paraRaw = paraLines.join('\n');
+        blocks.push({ id: blockId++, type: 'p', raw: paraRaw, html: marked.parse(paraRaw) });
+    }
+    return blocks;
+}
+
+/**
+ * 渲染所有 blocks 到页面
+ */
+function renderBookBlocks() {
+    var page = $('bookPage');
+    if (!_bookBlocks.length) {
+        page.innerHTML = '<div class="kb-content-empty"><div class="kb-content-empty-icon">📖</div><div class="empty-text">书籍内容为空</div></div>';
+        $('bookBlockCount').textContent = '';
+        return;
+    }
+    // 统计有内容的块
+    var contentBlocks = _bookBlocks.filter(function(b){ return b.type !== 'empty'; });
+    $('bookBlockCount').textContent = contentBlocks.length + ' 个内容块';
+
+    var html = '';
+    for (var i = 0; i < _bookBlocks.length; i++) {
+        var b = _bookBlocks[i];
+        html += '<div class="book-block" data-type="' + b.type + '" data-idx="' + i + '" draggable="false">';
+        html += '<div class="block-handle" draggable="true" title="拖拽移动">⠿</div>';
+        html += '<div class="block-content">' + b.html + '</div>';
+        html += '</div>';
+    }
+    page.innerHTML = html;
+
+    // 绑定拖拽事件
+    initBookDragDrop();
+}
+
+/**
+ * 初始化拖拽排序
+ */
+function initBookDragDrop() {
+    var page = $('bookPage');
+    var dragIdx = -1;
+    var dropIdx = -1;
+    var indicator = null;
+
+    // 创建拖拽占位线
+    indicator = document.createElement('div');
+    indicator.className = 'block-drop-indicator';
+    indicator.style.position = 'absolute';
+    indicator.style.left = '0';
+    indicator.style.right = '0';
+    indicator.style.display = 'none';
+    page.style.position = 'relative';
+    page.appendChild(indicator);
+
+    // 给每个 handle 绑定 dragstart
+    var handles = page.querySelectorAll('.block-handle');
+    handles.forEach(function(h) {
+        h.addEventListener('dragstart', function(e) {
+            var block = h.parentElement;
+            dragIdx = parseInt(block.getAttribute('data-idx'));
+            block.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', dragIdx);
+            // 设置拖拽图像
+            e.dataTransfer.setDragImage(block, 20, 20);
+        });
+        h.addEventListener('dragend', function() {
+            // 清除拖拽样式
+            var blocks = page.querySelectorAll('.book-block');
+            blocks.forEach(function(b){ b.classList.remove('dragging'); });
+            indicator.style.display = 'none';
+            // 执行移动
+            if (dragIdx >= 0 && dropIdx >= 0 && dragIdx !== dropIdx) {
+                moveBlock(dragIdx, dropIdx);
+            }
+            dragIdx = -1;
+            dropIdx = -1;
+        });
+    });
+
+    // 给所有 block 绑定 dragover / dragleave / drop
+    var allBlocks = page.querySelectorAll('.book-block');
+    allBlocks.forEach(function(block) {
+        block.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            var rect = block.getBoundingClientRect();
+            var pageRect = page.getBoundingClientRect();
+            var midY = rect.top + rect.height / 2;
+            var idx = parseInt(block.getAttribute('data-idx'));
+
+            if (e.clientY < midY) {
+                // 放在此块上方
+                dropIdx = idx;
+                indicator.style.top = (rect.top - pageRect.top - 2) + 'px';
+            } else {
+                // 放在此块下方
+                dropIdx = idx + 1;
+                indicator.style.top = (rect.bottom - pageRect.top - 2) + 'px';
+            }
+            indicator.style.display = 'block';
+            indicator.style.left = '36px';
+            indicator.style.right = '12px';
+            indicator.style.height = '3px';
+            indicator.style.background = 'linear-gradient(90deg, #667eea, #764ba2)';
+            indicator.style.borderRadius = '3px';
+            indicator.style.pointerEvents = 'none';
+        });
+        block.addEventListener('dragleave', function() {
+            // 不立即隐藏，等 dragend 统一处理
+        });
+        block.addEventListener('drop', function(e) {
+            e.preventDefault();
+        });
+    });
+}
+
+/**
+ * 移动块：从 fromIdx 移到 toIdx
+ */
+function moveBlock(fromIdx, toIdx) {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    var block = _bookBlocks.splice(fromIdx, 1)[0];
+    // splice 后索引可能变化
+    if (toIdx > fromIdx) toIdx--;
+    _bookBlocks.splice(toIdx, 0, block);
+    // 重新编号
+    for (var i = 0; i < _bookBlocks.length; i++) {
+        _bookBlocks[i].id = i;
+    }
+    _bookDirty = true;
+    renderBookBlocks();
+    toast('已移动块', 'ok');
+}
+
+/**
+ * 保存书籍（将 blocks 按顺序合成 Markdown 发送到后端）
+ */
+function saveBookBlocks() {
+    if (!_currentBookFilename) { toast('没有打开的书籍', 'error'); return; }
+    var md = _bookBlocks.map(function(b) { return b.raw; }).join('\n\n');
+    var btn = $('btnSaveBook');
+    btn.disabled = true;
+    btn.textContent = '⏳ 保存中...';
+
+    fetch(API + '/book-content/' + encodeURIComponent(_currentBookFilename), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: md })
+    }).then(function(r){ return r.json(); }).then(function(data) {
+        btn.disabled = false;
+        btn.textContent = '💾 保存';
+        if (data.success) {
+            _bookDirty = false;
+            toast('保存成功', 'ok');
+        } else {
+            toast('保存失败：' + (data.message || ''), 'error');
+        }
+    }).catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = '💾 保存';
+        toast('保存失败：' + e.message, 'error');
+    });
+}
+
+/**
+ * 导出当前书籍
+ */
+function downloadCurrentBook() {
+    if (!_currentBookFilename) { toast('没有打开的书籍', 'error'); return; }
+    var url = API + '/download-book/' + encodeURIComponent(_currentBookFilename);
+    fetch(url).then(function(r) {
+        if (!r.ok) throw new Error('下载失败');
+        return r.blob();
+    }).then(function(blob) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = _currentBookFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+    }).catch(function(e) {
+        toast('下载失败：' + e.message, 'error');
+    });
+}
+
+// ================================================================
+// 启动
+// ================================================================
+initSplitLayout();
+setupUpload();
+refreshList();
+// ✅ 不再自动轮询，只有上传文件后才启动轮询
+loadKbDocList();
+// 启动时检查是否有合成书，显示"书籍"按钮
+loadBookList();
+
+// 默认视图为 PDF+MD 双栏（点击文件后自动进入此视图）
+switchView('pdfmd');
+
+/**
+ * 调用后端接口将 Markdown 转为 PDF
+ * WeasyPrint 在服务端渲染，绕过浏览器和打印机驱动
+ */
+function exportBackendPDF() {
+    if (!currentFileId) { toast('请先打开一个文件', 'err'); return; }
+    toast('正在生成 PDF，请稍候...', 'info');
+    fetch(API + '/export-pdf/' + currentFileId)
+        .then(function(resp) {
+            if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.message || '生成失败'); });
+            // 从响应头取文件名
+            var disposition = resp.headers.get('Content-Disposition') || '';
+            var match = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+            var filename = match ? decodeURIComponent(match[1].replace(/"/g,'')) : 'document.pdf';
+            return resp.blob().then(function(blob) { return { blob: blob, filename: filename }; });
+        })
+        .then(function(obj) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(obj.blob);
+            a.download = obj.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            toast('PDF 已下载：' + obj.filename, 'ok');
+        })
+        .catch(function(e) { toast('PDF 导出失败：' + e.message, 'err'); });
+}
+</script>
+</body>
+</html>

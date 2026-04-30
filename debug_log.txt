@@ -1,0 +1,3 @@
+api_key=sk-cp-aF8U
+api_base=https://api.minimax.chat/v1
+model=MiniMax-M2.7

@@ -1,0 +1,14 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "chat.tools.terminal.autoApprove": {
+        "/^G:/xiazai/python\\.exe -c \"import fitz; print\\('fitz ok:', fitz\\.__version__\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^G:/xiazai/python\\.exe -m pip install pymupdf 2>&1 \\| Select-String \"Successfully\\|already\\|error\" \\| Select-Object -Last 5$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
