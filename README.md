@@ -1,188 +1,316 @@
-# 文档清洗与 Markdown 导出系统
+# DocClean
 
-> 支持 PDF、Word、Excel、图片（OCR）、Markdown → 可编辑 Markdown
+**Privacy-first document to Markdown converter with OCR, GPU acceleration, and AI knowledge base.**
 
----
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/docker-supported-brightgreen)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR-orange)](https://github.com/PaddlePaddle/PaddleOCR)
 
-## 一、整体目录结构
-
-```
-clear_plus/
-├── backend/              # Python Flask 后端
-│   ├── app.py            # 主入口，运行这个文件即可启动
-│   ├── config.py         # 配置文件（路径、限制等）
-│   ├── .env              # 环境变量（不要改）
-│   ├── requirements.txt  # Python 依赖
-│   ├── files.db          # 自动生成，存放文件记录（不要删）
-│   ├── services/         # 核心处理服务
-│   │   ├── ocr_service.py       # PaddleOCR 图片文字识别
-│   │   ├── extractor_service.py # PDF/Word/Excel 内容提取
-│   │   └── cleaner_service.py   # 数据清洗
-│   ├── routes/           # 接口路由
-│   │   └── upload_routes.py
-│   └── models/           # 数据模型
-│       └── file_model.py
-├── frontend/             # 前端界面
-│   └── index.html        # 网页界面（双击打开，或由 Flask 提供）
-├── uploads/              # 上传的文件存放目录（自动创建）
-└── outputs/              # 导出的 Markdown 文件目录（自动创建）
-```
+Convert PDF, Word, Excel, images, and Markdown files into clean, editable Markdown — entirely on your own machine. No cloud uploads. No data leaks. No subscriptions required.
 
 ---
 
-## 二、安装步骤（一步一步来，不要跳过）
+## Why DocClean?
 
-### 第 1 步：安装 Python
+Most document conversion tools (Mathpix, Docparser, Smallpdf) require uploading your files to their cloud servers. That's a dealbreaker for anyone handling sensitive documents — law firms, hospitals, banks, researchers, and businesses.
 
-打开 PowerShell（Win+R → 输入 `powershell` → 回车），运行：
+**DocClean runs entirely on your own server.** Your documents never leave your machine.
 
-```powershell
-python --version
-```
+### What makes it different
 
-如果没有显示版本号，去 https://www.python.org/downloads/ 下载安装，**安装时勾选"Add Python to PATH"**。
-
----
-
-### 第 2 步：安装 PaddlePaddle GPU 版本（用于 OCR，有 RTX 3060 用这个）
-
-打开 PowerShell，进入项目目录：
-
-```powershell
-cd C:\Users\ChengXingYu\Desktop\kg\clear_plus\backend
-```
-
-然后安装 GPU 版本（使用 CUDA）：
-
-```powershell
-pip install paddlepaddle-gpu
-```
-
-安装完成后验证（看到 `True` 就说明成功了）：
-
-```powershell
-python -c "import paddle; print(paddle.__version__)"
-```
+| Capability | DocClean | Mathpix | Docparser | Marker (OSS) |
+|---|---|---|---|---|
+| Local / Self-hosted | ✅ | ❌ | ❌ | ✅ |
+| PDF + OCR | ✅ | ✅ | ✅ | ✅ |
+| Word (.docx) | ✅ | ❌ | ❌ | ❌ |
+| Excel (.xlsx) | ✅ | ❌ | ❌ | ❌ |
+| Image OCR | ✅ | ✅ | ✅ | ❌ |
+| Web UI | ✅ | ✅ | ✅ | ❌ |
+| Built-in Markdown editor | ✅ | ❌ | ❌ | ❌ |
+| RAG knowledge base + AI Q&A | ✅ | ❌ | ❌ | ❌ |
+| Book compiler (outline → book) | ✅ | ❌ | ❌ | ❌ |
+| PDF export | ✅ | ✅ | ❌ | ❌ |
+| GPU acceleration | ✅ | ❌ | ❌ | ❌ |
+| One-time purchase option | ✅ | ❌ | ❌ | N/A |
 
 ---
 
-### 第 3 步：安装所有依赖
+## Features
 
-```powershell
-cd C:\Users\ChengXingYu\Desktop\kg\clear_plus\backend
-pip install flask flask-cors paddleocr pdfplumber pymupdf python-docx openpyxl python-dotenv werkzeug
-```
+### Document Processing
+- **6 file formats**: PDF (text + scanned), Word (.docx), Excel (.xlsx), Images (PNG/JPG/BMP/WebP/GIF), Markdown, Text
+- **OCR engine**: PaddleOCR with GPU acceleration (NVIDIA CUDA), best-in-class Chinese + English recognition
+- **Smart chunking**: Auto-split by pages (PDF), headings (Markdown), or fixed lines
+- **Real-time progress**: Live progress bar during parsing, 500ms polling
 
-然后安装 GPU 加速（PaddleOCR 用，RTX 3060 用这个更快）：
+### Data Cleaning & Export
+- **Auto-clean**: Removes garbled text, redundant whitespace, and formatting artifacts
+- **Markdown output**: Clean, well-structured Markdown ready for editing
+- **Inline editor**: Edit Markdown directly in the browser after conversion (EasyMDE)
+- **PDF export**: Convert Markdown back to PDF with Chinese font support
+- **Batch download**: Select multiple files and download as ZIP
 
-```powershell
-pip install paddlepaddle-gpu
-```
+### AI & Knowledge Base
+- **RAG search**: TF-IDF keyword search across all documents in your knowledge base
+- **LLM Q&A**: Ask questions about your documents — connects to any OpenAI-compatible API (MiniMax, OpenAI, Ollama, etc.)
+- **AI classification**: Auto-classify Excel outlines into structured categories, industry-agnostic
 
-验证是否成功：
+### Book Compiler
+- **Outline-driven compilation**: Upload a Word outline → automatically matches and merges Markdown chapters into a complete book
+- **Drag-and-drop editor**: Notion-style block editor for reordering book content
+- **One-click export**: Download compiled books as a single Markdown file
 
-```powershell
-python -c "import flask; import pdfplumber; import fitz; import docx; import openpyxl; print('全部依赖 OK')"
-```
-
-如果显示 `全部依赖 OK` 就说明安装好了。
+### Privacy & Deployment
+- **100% local**: All processing happens on your machine, zero data leaves your server
+- **Docker support**: One-command deployment with `docker-compose up -d`
+- **GPU-ready**: Leverages NVIDIA GPU for fast OCR (CPU fallback available)
 
 ---
 
-## 三、启动系统
+## Quick Start
 
-### 方法 1：用 PowerShell 启动（推荐）
+### Option 1: Docker (recommended)
 
-```powershell
-cd C:\Users\ChengXingYu\Desktop\kg\clear_plus\backend
+```bash
+# 1. Clone the repository
+git clone https://github.com/yourusername/docclean.git
+cd docclean
+
+# 2. Create your config file
+cp .env.example backend/.env
+
+# 3. (Optional) Edit backend/.env to add your LLM API key for AI features
+#    AI Q&A and classification need this. Basic conversion works without it.
+
+# 4. Start the container
+docker-compose up -d
+
+# 5. Open your browser → http://localhost:5000
+```
+
+**For GPU acceleration** (requires NVIDIA GPU + nvidia-container-toolkit):
+
+1. Open `docker-compose.yml`
+2. Change `dockerfile: Dockerfile` → `dockerfile: Dockerfile.gpu`
+3. Uncomment the `deploy` section (GPU device reservation)
+4. Run `docker-compose up -d`
+
+### Option 2: Manual Installation
+
+**Prerequisites**: Python 3.10 or 3.11, pip
+
+```bash
+# 1. Clone and enter the project
+git clone https://github.com/yourusername/docclean.git
+cd docclean
+
+# 2. Install dependencies
+#    CPU version:
+pip install paddlepaddle==2.6.2
+pip install -r backend/requirements.txt
+
+#    GPU version (CUDA 11.8):
+#    pip install paddlepaddle-gpu==2.6.2.post118
+#    pip install -r backend/requirements.txt
+
+# 3. Create your config
+cp .env.example backend/.env
+
+# 4. Start the server
+cd backend
 python app.py
+
+# 5. Open http://localhost:5000
 ```
-
-看到下面这些字说明启动成功了：
-
-```
-==================================================
-文档清洗与 Markdown 导出系统
-访问地址：http://localhost:5000
-==================================================
-```
-
-### 方法 2：双击启动
-
-双击文件 `backend/app.py` 即可启动（需要先关联 Python）。
 
 ---
 
-## 四、使用方法
+## Configuration
 
-### 打开网页
+All settings are in `backend/.env`:
 
-在浏览器里打开：
-
-```
-http://localhost:5000
-```
-
-### 上传文件
-
-1. 点击虚线区域，或直接把文件拖进去
-2. 支持格式：**PDF、Word（.docx）、Excel（.xlsx）、图片（.png/.jpg）、Markdown（.md）**
-3. 文件大小不能超过 **50MB**，超过了会提示错误
-
-### 查看状态
-
-上传后，文件列表会显示：
-- **上传中** → 文件刚传上去
-- **解析中** → 正在提取文字和清洗
-- **已完成** → 可以下载了
-- **失败** → 出了错误
-
-解析中的文件会自动刷新状态，**完成后会停止刷新**。
-
-### 下载
-
-- 单个文件：点击文件名旁边的**「下载」**按钮
-- 全部下载：点击右上角**「打包下载全部」**，会下载一个 zip 文件
-
-### 删除
-
-1. 勾选要删除的文件
-2. 点击**「删除」**
-3. 会弹出确认框，问你"确定要删除吗？"
-4. 点击**「确认删除」**即可
+| Variable | Default | Description |
+|---|---|---|
+| `HOST` | `0.0.0.0` | Server bind address |
+| `PORT` | `5000` | Server port |
+| `UPLOAD_FOLDER` | `uploads` | Upload storage directory |
+| `OUTPUT_FOLDER` | `outputs` | Markdown output directory |
+| `MAX_CONTENT_LENGTH` | `52428800` | Max file size in bytes (50 MB) |
+| `ALLOWED_EXTENSIONS` | `pdf,docx,xlsx,png,jpg,...` | Allowed file types |
+| `OCR_USE_GPU` | `true` | Enable GPU for OCR (set `false` for CPU Docker) |
+| `LLM_API_KEY` | (empty) | API key for AI Q&A (MiniMax, OpenAI, Ollama compatible) |
+| `LLM_API_BASE` | `https://api.minimax.chat/v1` | LLM API endpoint (OpenAI-compatible) |
+| `LLM_MODEL` | `MiniMax-M2.7` | Model name |
 
 ---
 
-## 五、常见问题
+## API Reference
 
-### Q：启动后浏览器打开 http://localhost:5000 显示 404？
+All endpoints available at `http://localhost:5000/api/`.
 
-先确认在 PowerShell 里 `python app.py` 正在运行，没有报错。然后刷新浏览器。
+### File Upload & Management
 
-### Q：图片 OCR 识别很慢？
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/upload` | Upload one or more files (multipart form) |
+| `GET` | `/api/files` | List all uploaded files with status |
+| `GET` | `/api/download/<file_id>` | Download converted Markdown file |
+| `POST` | `/api/delete` | Batch delete files `{"file_ids": [1, 2]}` |
+| `GET` | `/api/download/all` | Download all completed files as ZIP |
+| `POST` | `/api/download/batch` | Download selected files as ZIP `{"file_ids": [1, 2]}` |
+| `GET` | `/api/export-pdf/<file_id>` | Export Markdown to PDF |
+| `GET` | `/api/parse-progress` | Poll parsing progress (for progress bar) |
+| `GET` | `/api/file-content/<file_id>` | Read Markdown content for editing |
+| `PUT` | `/api/file-content/<file_id>` | Save edited Markdown content |
+| `GET` | `/api/tree/<file_id>` | Get document chapter tree structure (JSON) |
+| `GET` | `/api/upload-file/<filename>` | Serve original uploaded file |
 
-因为用了 CPU。如果有 NVIDIA 显卡，按第二步安装 GPU 版本后会快很多。
+### Knowledge Base & AI
 
-### Q：PDF/Word 解析失败？
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/kb/list` | List files in knowledge base |
+| `GET` | `/api/kb/tree/<file_id>` | Get knowledge base file tree |
+| `GET` | `/api/kb/chunks/<file_id>` | Get text chunks for a file |
+| `GET` | `/api/kb/search?q=<query>` | Search knowledge base |
+| `POST` | `/api/kb/ask` | Ask AI a question `{"query": "..."}` |
+| `GET` | `/api/kb/config` | Get LLM configuration |
+| `POST` | `/api/kb/config` | Update LLM configuration |
+| `POST` | `/api/kb/test-llm` | Test LLM connection |
+| `POST` | `/api/kb/rebuild/<file_id>` | Rebuild knowledge base index |
+| `POST` | `/api/kb/classify-excel/<file_id>` | AI classification for Excel files |
+| `GET` | `/api/kb/classify-status/<file_id>` | Check classification status |
 
-检查 PDF 是否是文字版（扫描版 PDF 没有文字，只能靠 OCR）。如果 PDF 是扫描的，用图片格式上传效果更好。
+### Book Compiler
 
-### Q：端口 5000 被占用？
-
-打开 `backend/config.py`，把 `PORT = 5000` 改成其他端口，比如 `PORT = 5001`，然后重启。
-
-### Q：文件上传后状态一直是"解析中"？
-
-可能是 Python 程序崩溃了。关掉 PowerShell 窗口，重新 `python app.py`，然后刷新页面看状态。
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/compile-book` | Compile book from Word outline `{"docx_path": "..."}` |
+| `GET` | `/api/download-book/<filename>` | Download compiled book |
+| `GET` | `/api/book-content/<filename>` | Read book content |
+| `PUT` | `/api/book-content/<filename>` | Save book content |
+| `GET` | `/api/list-books` | List compiled books |
+| `GET` | `/api/list-docx` | List available Word outline files |
 
 ---
 
-## 六、技术说明（不用看也知道怎么用）
+## Project Structure
 
-- **后端**：Flask（Python，轻量级 Web 框架）
-- **OCR**：PaddleOCR + PaddlePaddle（GPU 加速）
-- **PDF 解析**：pdfplumber
-- **Word 解析**：python-docx
-- **Excel 解析**：openpyxl
-- **前端**：纯 HTML + JavaScript，不需要 npm/React
-- **数据存储**：SQLite（文件数据库，自动创建在 backend/files.db）
+```
+docclean/
+├── backend/
+│   ├── app.py                  # Flask entry point
+│   ├── config.py               # Configuration loader
+│   ├── config_manager.py       # LLM config persistence
+│   ├── progress_store.py       # Real-time progress tracking
+│   ├── requirements.txt        # Python dependencies
+│   ├── .env                    # Environment config (git-ignored)
+│   ├── models/
+│   │   └── file_model.py       # SQLite file state management
+│   ├── routes/
+│   │   ├── upload_routes.py    # File upload & management APIs
+│   │   ├── knowledge_routes.py # Knowledge base & RAG APIs
+│   │   └── book_routes.py      # Book compiler APIs
+│   └── services/
+│       ├── extractor_service.py    # PDF/Word/Excel/Image text extraction
+│       ├── ocr_service.py          # PaddleOCR GPU/CPU engine
+│       ├── cleaner_service.py      # Data cleaning & formatting
+│       ├── rag_service.py          # TF-IDF search + LLM Q&A
+│       ├── book_compiler_service.py # Outline-driven book compiler
+│       ├── pdf_service.py          # Markdown → PDF export
+│       └── tree_parser.py          # Chapter tree structure parser
+├── frontend/
+│   └── index.html              # Single-page web UI (English)
+├── Dockerfile                  # CPU Docker image
+├── Dockerfile.gpu              # GPU Docker image (CUDA 11.8)
+├── docker-compose.yml          # One-command deployment
+├── .env.example                # Configuration template
+└── README.md                   # This file
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend framework | Flask 3.0 |
+| OCR engine | PaddleOCR 2.7 + PaddlePaddle 2.6 |
+| PDF parsing | pdfminer.six + PyMuPDF |
+| Word parsing | python-docx |
+| Excel parsing | openpyxl |
+| PDF generation | fpdf2 |
+| Markdown editor | EasyMDE |
+| PDF viewer | PDF.js |
+| Database | SQLite |
+| Containerization | Docker + Docker Compose |
+
+---
+
+## FAQ
+
+**Do I need a GPU?**
+No. DocClean works on CPU with the default Docker image. GPU acceleration (NVIDIA CUDA) makes OCR 3-5x faster — recommended if you process scanned PDFs in bulk.
+
+**Does it work on Mac / Linux?**
+Yes. Docker runs everywhere. Manual Python install is also cross-platform. GPU OCR is Linux + Windows only.
+
+**What languages does OCR support?**
+PaddleOCR supports 80+ languages. DocClean is optimized for English and Chinese. Other languages work with PaddleOCR's built-in models.
+
+**Is my data safe?**
+Yes. All processing is local. DocClean never sends your documents to any external server. The only outbound call is the optional LLM API (if you configure AI Q&A).
+
+**Can I use DocClean commercially?**
+Yes, MIT licensed. Note: PyMuPDF (fitz) uses AGPL — if you distribute DocClean commercially, either [buy a PyMuPDF license](https://pymupdf.com/pricing/) ($399/year) or replace with `pdfplumber` (MIT).
+
+**How do I update?**
+```bash
+git pull
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+---
+
+## Roadmap
+
+- [x] English UI (frontend + API)
+- [x] Docker deployment (CPU + GPU)
+- [ ] CI/CD with GitHub Actions
+- [ ] Swagger/OpenAPI documentation
+- [ ] Dedicated English OCR model optimization
+- [ ] License key system for commercial distribution
+- [ ] Modern UI refresh (Tailwind CSS / Vue 3)
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. For major changes, open an issue first to discuss.
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) file.
+
+> Third-party note: PyMuPDF (fitz) is AGPL-licensed. For commercial closed-source distribution, [purchase a commercial license](https://pymupdf.com/pricing/) or replace with `pdfplumber` (MIT).
+
+---
+
+## Acknowledgments
+
+Built with these excellent open-source projects:
+
+- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) — OCR engine
+- [Flask](https://flask.palletsprojects.com/) — Web framework
+- [EasyMDE](https://github.com/Ionaru/easy-markdown-editor) — Markdown editor
+- [PDF.js](https://mozilla.github.io/pdf.js/) — PDF viewer
+- [fpdf2](https://github.com/py-pdf/fpdf2) — PDF generation
+
+---
+
+> **DocClean is not just another file converter.** It's a privacy-first document intelligence tool that keeps your data where it belongs — on your own machine. That's the one thing no cloud competitor can offer, and that's what customers will pay for.

@@ -12,7 +12,21 @@ except Exception as e:
     exit(1)
 
 # 测试2：检查合成书下载接口的响应头
-filename = urllib.parse.quote("餐饮运营知识大全-目录V3.0.md")
+# 测试2：先用 /api/list-books 获取第一个书籍文件名
+try:
+    import json
+    list_url = "http://localhost:5000/api/list-books"
+    list_resp = urllib.request.urlopen(list_url)
+    books = json.loads(list_resp.read())["books"]
+    if books:
+        filename = urllib.parse.quote(books[0]["filename"])
+    else:
+        print("没有合成书，跳过下载测试")
+        exit(0)
+except Exception as e:
+    print("获取书籍列表失败:", e)
+    exit(1)
+
 url = "http://localhost:5000/api/download-book/" + filename
 print("请求URL:", url)
 
@@ -36,9 +50,10 @@ except Exception as e:
 print()
 print("=" * 50)
 
-# 测试3：测试不带中文的简单URL
+# 测试3：测试不带URL编码的中文路径
 print("测试不带URL编码的中文路径...")
-url2 = "http://localhost:5000/api/download-book/餐饮运营知识大全-目录V3.0.md"
+if books:
+    url2 = "http://localhost:5000/api/download-book/" + books[0]["filename"]
 try:
     req2 = urllib.request.Request(url2)
     resp2 = urllib.request.urlopen(req2)

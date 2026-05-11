@@ -34,6 +34,30 @@ _cache = {}
 _CACHE_LOCK = threading.Lock()
 _CACHE_TTL = 300  # 缓存有效期（秒）
 
+# 防止同一个文件重复启动 LLM 补充线程
+_enrich_in_progress = set()
+
+
+def _do_enrich(tree_ref, md_path, tree_file_path, fname, file_id_key):
+    """后台线程：对旧 _tree.json 补充 LLM 分类字段，完成后写回文件和缓存"""
+    import json as _j
+    try:
+        from services.tree_parser import classify_document_with_llm
+        with open(md_path, encoding="utf-8") as _f:
+            _md = _f.read()
+        cls = classify_document_with_llm(_md, fname)
+        if cls:
+            tree_ref["doc_type"] = cls["doc_type"]
+            tree_ref["doc_category"] = cls["doc_category"]
+            tree_ref["description"] = cls["description"]
+            with open(tree_file_path, "w", encoding="utf-8") as _fw:
+                _j.dump(tree_ref, _fw, ensure_ascii=False, indent=2)
+            _set_cached(file_id_key, tree_ref, [])
+    except Exception:
+        pass
+    finally:
+        _enrich_in_progress.discard(md_path)
+
 
 def _get_cached(file_id):
     with _CACHE_LOCK:
@@ -91,7 +115,10 @@ def kb_list():
             "file_ext": file_ext,
             "file_size": f.get("file_size", 0),
             "created_at": f.get("created_at", 0),
-            "node_count": node_count
+            "node_count": node_count,
+            "doc_type": (tree or {}).get("doc_type", ""),
+            "doc_category": (tree or {}).get("doc_category", ""),
+            "description": (tree or {}).get("description", "")
         })
 
     result.sort(key=lambda x: x["created_at"], reverse=True)
@@ -99,7 +126,7 @@ def kb_list():
 
 
 def _build_tree_from_file(f):
-    """从文件系统加载并构建树"""
+    """从文件系统加载并构建树（优先使用 AI 分类结果）"""
     output_path = f.get("output_path", "")
     if not output_path:
         return None, []
@@ -107,6 +134,38 @@ def _build_tree_from_file(f):
     if not os.path.exists(output_path):
         return None, []
     try:
+        import json as _json
+        from services.tree_parser import classify_document_with_llm
+
+        # 优先读取 AI 分类生成的 _excel_tree.json（Excel 大纲分类结果）
+        tree_basename = os.path.splitext(os.path.basename(output_path))[0] + "_excel_tree.json"
+        tree_path = os.path.abspath(os.path.join(OUTPUT_FOLDER, tree_basename))
+        if os.path.exists(tree_path):
+            with open(tree_path, encoding="utf-8") as fp:
+                tree = _json.load(fp)
+            _set_cached(f["id"], tree, [])
+            return tree, []
+
+        # 其次读取上传时生成的 _tree.json
+        regular_tree_basename = os.path.splitext(os.path.basename(output_path))[0] + "_tree.json"
+        regular_tree_path = os.path.abspath(os.path.join(OUTPUT_FOLDER, regular_tree_basename))
+        if os.path.exists(regular_tree_path):
+            with open(regular_tree_path, encoding="utf-8") as fp:
+                tree = _json.load(fp)
+            # ✨ 旧文件若缺少 doc_type，启动后台线程补充 LLM 分类
+            if not tree.get("doc_type") and output_path not in _enrich_in_progress:
+                _enrich_in_progress.add(output_path)
+                import threading
+                t = threading.Thread(
+                    target=_do_enrich,
+                    args=(tree, output_path, regular_tree_path, f.get("original_name", ""), f["id"]),
+                    daemon=True
+                )
+                t.start()
+            _set_cached(f["id"], tree, [])
+            return tree, []
+
+        # 都不存在时，退回到实时解析（会调用 LLM）
         with open(output_path, encoding="utf-8") as fp:
             md_content = fp.read()
         tree, chunks = _build_doc(f["id"], md_content, f.get("original_name", ""))
@@ -134,13 +193,29 @@ def kb_tree(file_id):
     """
     f = get_file_by_id(file_id)
     if not f:
-        return jsonify({"success": False, "message": "文档不存在"}), 404
+        return jsonify({"success": False, "message": "Document not found"}), 404
     if f["status"] != "done":
-        return jsonify({"success": False, "message": "文档尚未解析完成"}), 400
+        return jsonify({"success": False, "message": "Document not yet parsed"}), 400
 
-    tree, _ = _get_cached(file_id)
-    if tree is None:
-        tree, _ = _build_tree_from_file(f)
+    # 先检查是否存在 AI 分类结果文件（绕过旧缓存，保证显示最新树）
+    output_path = f.get("output_path", "")
+    excel_tree_loaded = False
+    if output_path:
+        import json as _json
+        tb = os.path.splitext(os.path.basename(output_path))[0] + "_excel_tree.json"
+        tp = os.path.abspath(os.path.join(OUTPUT_FOLDER, tb))
+        if os.path.exists(tp):
+            try:
+                with open(tp, encoding="utf-8") as _fp:
+                    tree = _json.load(_fp)
+                _set_cached(file_id, tree, [])   # 写入缓存，覆盖旧数据
+                excel_tree_loaded = True
+            except Exception:
+                pass
+    if not excel_tree_loaded:
+        tree, _ = _get_cached(file_id)
+        if tree is None:
+            tree, _ = _build_tree_from_file(f)
 
     return jsonify({
         "success": True,
@@ -159,9 +234,9 @@ def kb_chunks(file_id):
     """
     f = get_file_by_id(file_id)
     if not f:
-        return jsonify({"success": False, "message": "文档不存在"}), 404
+        return jsonify({"success": False, "message": "Document not found"}), 404
     if f["status"] != "done":
-        return jsonify({"success": False, "message": "文档尚未解析完成"}), 400
+        return jsonify({"success": False, "message": "Document not yet parsed"}), 400
 
     _, chunks = _get_cached(file_id)
     if chunks is None:
@@ -179,15 +254,36 @@ def kb_chunks(file_id):
 @knowledge_bp.route("/api/kb/search", methods=["GET"])
 def kb_search():
     """
-    搜索文档内容
-    参数：
-      q: 查询词（必填）
-      file_id: 可选，限定文档ID
-      top_k: 返回数量，默认5
+    Search the knowledge base using TF-IDF keyword matching.
+    ---
+    tags:
+      - Knowledge Base
+    parameters:
+      - name: q
+        in: query
+        type: string
+        required: true
+        description: Search query text
+      - name: file_id
+        in: query
+        type: integer
+        required: false
+        description: Limit search to a specific file
+      - name: top_k
+        in: query
+        type: integer
+        required: false
+        default: 5
+        description: Number of top results to return
+    responses:
+      200:
+        description: Search results with relevance scores
+      400:
+        description: Query is empty
     """
     query = request.args.get("q", "").strip()
     if not query:
-        return jsonify({"success": False, "message": "查询词不能为空"}), 400
+        return jsonify({"success": False, "message": "Query cannot be empty"}), 400
 
     file_id = request.args.get("file_id", type=int)
     top_k = request.args.get("top_k", default=5, type=int)
@@ -236,8 +332,36 @@ def kb_search():
 @knowledge_bp.route("/api/kb/ask", methods=["POST"])
 def kb_ask():
     """
-    问答接口
-    请求体：{"query": "问题", "file_id": 可选, "top_k": 5}
+    AI Q&A — ask a question about your documents.
+    Searches knowledge base for relevant chunks, then generates an answer via LLM.
+    Requires LLM API key configured in Settings.
+    ---
+    tags:
+      - Knowledge Base
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - query
+          properties:
+            query:
+              type: string
+              description: Your question about the documents
+            file_id:
+              type: integer
+              description: Optional, limit context to a specific file
+            top_k:
+              type: integer
+              default: 5
+              description: Number of context chunks to retrieve
+    responses:
+      200:
+        description: AI-generated answer with source context
+      400:
+        description: Question is empty
     """
     data = request.get_json() or {}
     query = data.get("query", "").strip()
@@ -245,7 +369,7 @@ def kb_ask():
     top_k = data.get("top_k", 5)
 
     if not query:
-        return jsonify({"success": False, "message": "问题不能为空"}), 400
+        return jsonify({"success": False, "message": "Question cannot be empty"}), 400
 
     # 获取相关块
     chunks = []
@@ -291,7 +415,7 @@ def kb_ask():
         return jsonify({
             "success": True,
             "query": query,
-            "answer": "没有找到相关内容，请尝试不同的查询词。",
+            "answer": "No relevant content found. Try a different query.",
             "sources": []
         })
     else:
@@ -318,7 +442,15 @@ def kb_ask():
 
 @knowledge_bp.route("/api/kb/config", methods=["GET"])
 def kb_get_config():
-    """获取 LLM 配置（不返回 api_key 明文）"""
+    """
+    Get current LLM configuration (API key masked).
+    ---
+    tags:
+      - Knowledge Base
+    responses:
+      200:
+        description: LLM config with masked API key
+    """
     cfg = get_config()
     # 脱敏 api_key
     api_key = cfg.get("api_key", "")
@@ -330,7 +462,43 @@ def kb_get_config():
 
 @knowledge_bp.route("/api/kb/config", methods=["POST"])
 def kb_save_config():
-    """保存 LLM 配置"""
+    """
+    Save LLM configuration (API key, base URL, model).
+    Supports any OpenAI-compatible API: MiniMax, OpenAI, Ollama, etc.
+    ---
+    tags:
+      - Knowledge Base
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          properties:
+            api_key:
+              type: string
+              description: LLM API key
+            api_base:
+              type: string
+              description: API base URL
+              default: https://api.minimax.chat/v1
+            model:
+              type: string
+              description: Model name
+              default: MiniMax-M2.7
+            temperature:
+              type: number
+              default: 0.7
+            max_tokens:
+              type: integer
+              default: 2000
+            enabled:
+              type: boolean
+              default: false
+    responses:
+      200:
+        description: Config saved confirmation
+    """
     data = request.get_json() or {}
     api_key = data.get("api_key", "").strip()
     api_base = data.get("api_base", "https://api.minimax.chat/v1").strip()
@@ -355,8 +523,8 @@ def kb_save_config():
 
     ok = save_config(new_config)
     if ok:
-        return jsonify({"success": True, "message": "配置已保存"})
-    return jsonify({"success": False, "message": "保存失败，请检查权限"}), 500
+        return jsonify({"success": True, "message": "Config saved"})
+    return jsonify({"success": False, "message": "Save failed, please check permissions"}), 500
 
 
 def _read_env(key, default=""):
@@ -375,7 +543,29 @@ def _read_env(key, default=""):
 
 @knowledge_bp.route("/api/kb/test-llm", methods=["POST"])
 def kb_test_llm():
-    """测试 LLM 连接"""
+    """
+    Test LLM connection with current configuration.
+    Sends a simple "hello" message and checks the response.
+    ---
+    tags:
+      - Knowledge Base
+    parameters:
+      - name: body
+        in: body
+        required: false
+        schema:
+          type: object
+          properties:
+            api_key:
+              type: string
+              description: Override API key for testing
+            api_base:
+              type: string
+              description: Override API base URL for testing
+    responses:
+      200:
+        description: Test result (success or failure with error message)
+    """
     try:
         data = request.get_json()
         if not isinstance(data, dict):
@@ -397,7 +587,7 @@ def kb_test_llm():
     model = _model.strip() if _model else _read_env("LLM_MODEL", "MiniMax-M2.7")
 
     if not api_key:
-        return jsonify({"success": False, "message": "API Key 不能为空，请在设置中配置"})
+        return jsonify({"success": False, "message": "API Key cannot be empty, configure in Settings"})
 
     # 临时保存测试配置
     import time
@@ -442,9 +632,9 @@ def kb_rebuild(file_id):
     """
     f = get_file_by_id(file_id)
     if not f:
-        return jsonify({"success": False, "message": "文档不存在"}), 404
+        return jsonify({"success": False, "message": "Document not found"}), 404
     if f["status"] != "done":
-        return jsonify({"success": False, "message": "文档尚未解析完成"}), 400
+        return jsonify({"success": False, "message": "Document not yet parsed"}), 400
 
     # 清除缓存
     with _CACHE_LOCK:
@@ -454,7 +644,7 @@ def kb_rebuild(file_id):
     tree, chunks = _build_tree_from_file(f)
     return jsonify({
         "success": True,
-        "message": f"重建完成，共 {len(chunks)} 个分块，{sum(1 for _ in _flatten_tree(tree))} 个节点"
+        "message": f"Rebuild complete: {len(chunks)} chunks, {sum(1 for _ in _flatten_tree(tree))} nodes"
     })
 
 
@@ -507,7 +697,7 @@ def _classify_worker(file_id, output_path, original_name):
 
         _classify_tasks[file_id] = {
             "status": "done",
-            "message": f"分类完成！共 {stats['total_chunks']} 个段落，丢弃 {stats['discarded']} 个无效段落",
+            "message": f"Classification complete! {stats['total_chunks']} paragraphs, {stats['discarded']} invalid discarded",
             "tree": tree,
             "stats": stats
         }
@@ -518,7 +708,7 @@ def _classify_worker(file_id, output_path, original_name):
         del_progress(file_id)
         _classify_tasks[file_id] = {
             "status": "error",
-            "message": f"分类失败: {e}"
+            "message": f"Classification failed: {e}"
         }
 
 
@@ -530,28 +720,28 @@ def kb_classify_excel(file_id):
     """
     f = get_file_by_id(file_id)
     if not f:
-        return jsonify({"success": False, "message": "文档不存在"}), 404
+        return jsonify({"success": False, "message": "Document not found"}), 404
     if f["status"] != "done":
-        return jsonify({"success": False, "message": "文档尚未解析完成"}), 400
+        return jsonify({"success": False, "message": "Document not yet parsed"}), 400
 
     if not is_llm_enabled():
         return jsonify({
             "success": False,
-            "message": "LLM 未配置，请在设置中配置 API Key 后重试"
+            "message": "LLM not configured. Set API Key in Settings and retry."
         }), 400
 
     output_path = f.get("output_path", "")
     if not output_path or not os.path.exists(os.path.abspath(output_path)):
-        return jsonify({"success": False, "message": "Markdown 文件不存在"}), 404
+        return jsonify({"success": False, "message": "Markdown file not found"}), 404
 
     # 如果任务已在运行，拒绝重复启动
     task = _classify_tasks.get(file_id)
     if task and task["status"] == "running":
-        return jsonify({"success": False, "message": "分类正在进行中，请稍候..."}), 409
+        return jsonify({"success": False, "message": "Classification in progress, please wait..."}), 409
 
     # 立即返回，启动后台线程
-    set_progress(file_id, 100, 0, "启动 LLM 分类...")
-    _classify_tasks[file_id] = {"status": "running", "message": "分类中...", "tree": None, "stats": None}
+    set_progress(file_id, 100, 0, "Starting LLM classification...")
+    _classify_tasks[file_id] = {"status": "running", "message": "Classifying...", "tree": None, "stats": None}
 
     thread = threading.Thread(
         target=_classify_worker,
@@ -562,7 +752,7 @@ def kb_classify_excel(file_id):
 
     return jsonify({
         "success": True,
-        "message": "分类已启动，请稍候...",
+        "message": "Classification started, please wait...",
         "status": "running"
     })
 
@@ -574,12 +764,24 @@ def kb_classify_status(file_id):
     """
     task = _classify_tasks.get(file_id)
     if not task:
-        return jsonify({"success": False, "message": "无分类任务"}), 404
+        return jsonify({"success": False, "message": "No classification task"}), 404
+
+    # 如果正在运行，同时返回实时进度百分比（来自 progress_store）
+    pct = 0
+    stage_msg = task.get("message", "")
+    if task["status"] == "running":
+        from progress_store import get_progress
+        prog = get_progress(file_id)
+        if prog:
+            pct = prog.get("pct", 0)
+            stage_msg = prog.get("stage", stage_msg)
 
     return jsonify({
         "success": True,
         "status": task["status"],
         "message": task.get("message", ""),
+        "stage": stage_msg,
+        "pct": pct,
         "stats": task.get("stats"),
         "tree": task.get("tree")
     })

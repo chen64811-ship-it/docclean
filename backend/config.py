@@ -31,6 +31,10 @@ PORT = int(os.getenv("PORT", 5000))
 # PaddleOCR GPU 配置
 OCR_USE_GPU = os.getenv("OCR_USE_GPU", "true").lower() == "true"
 
+# PaddleOCR 语言模型：auto（自动检测）、en（英文）、ch（中文）
+# auto 仅适用于 PDF（可从文本中检测），图片默认使用此值
+OCR_LANG = os.getenv("OCR_LANG", "en")
+
 # 确保上传和导出目录存在
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)

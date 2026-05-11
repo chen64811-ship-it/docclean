@@ -207,12 +207,12 @@ def generate_answer(query, context_chunks):
         return None
 
     if not context_chunks:
-        return "没有找到相关内容，请尝试其他查询词。"
+        return "No relevant content found. Try different query terms."
 
     # 构建上下文
     context_parts = []
     for i, chunk in enumerate(context_chunks, 1):
-        page_info = f"（第{chunk['page_start']}页）" if chunk['page_start'] else ""
+        page_info = f"(Page {chunk['page_start']})" if chunk['page_start'] else ""
         context_parts.append(f"【来源{i}】{chunk['title']}{page_info}:\n{chunk['content_preview']}\n")
 
     context_text = "\n\n".join(context_parts)
@@ -265,9 +265,9 @@ def generate_answer(query, context_chunks):
                 return choices[0].get("message", {}).get("content", "")
 
     except Exception as e:
-        return f"[LLM 调用失败] {str(e)}，请检查 API 配置"
+        return f"[LLM call failed] {str(e)}, check API config"
 
-    return "LLM 响应格式异常"
+    return "LLM response format error"
 
 
 def test_llm_connection():
@@ -278,7 +278,7 @@ def test_llm_connection():
     config = get_config()
     api_key = config.get("api_key", "").strip()
     if not api_key:
-        return False, "API Key 为空，请在设置中配置"
+        return False, "API Key is empty, configure in Settings"
 
     try:
         import urllib.request
@@ -310,8 +310,8 @@ def test_llm_connection():
             result = json.loads(resp.read().decode("utf-8"))
             choices = result.get("choices", [])
             if choices:
-                return True, "连接成功！LLM 响应正常"
-            return False, "响应格式异常"
+                return True, "Connection successful! LLM responding normally."
+            return False, "Response format error"
 
     except urllib.error.HTTPError as e:
         try:
@@ -319,7 +319,7 @@ def test_llm_connection():
             err_msg = err_body.get("error", {}).get("message", str(e))
         except Exception:
             err_msg = str(e)
-        return False, f"HTTP 错误 {e.code}: {err_msg}"
+        return False, f"HTTP error {e.code}: {err_msg}"
 
     except Exception as e:
-        return False, f"连接失败: {str(e)}"
+        return False, f"Connection failed: {str(e)}"

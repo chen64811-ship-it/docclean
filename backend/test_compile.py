@@ -7,7 +7,10 @@ from services.book_compiler_service import parse_word_outline, load_md_files, co
 from models.file_model import get_all_files
 from config import OUTPUT_FOLDER
 
-docx_path = r"C:\Users\ChengXingYu\Desktop\01_Working\vip\餐饮运营知识大全-目录V3.0.docx"
+# 自动扫描项目根目录（backend 的上一级）下的 .docx 文件作为大纲
+_vip_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+docx_files = [f for f in os.listdir(_vip_dir) if f.endswith(".docx") and not f.startswith("~$")]
+docx_path = os.path.join(_vip_dir, docx_files[0]) if docx_files else ""
 
 # 1. 测试大纲解析
 secs = parse_word_outline(docx_path)
@@ -28,6 +31,6 @@ result = compile_book(
     docx_path=docx_path,
     output_folder=OUTPUT_FOLDER,
     file_records=done,
-    book_title="餐饮运营知识大全"
+    book_title=os.path.splitext(os.path.basename(docx_path))[0] if docx_path else "知识库"
 )
 print(f"\n结果: {result}")

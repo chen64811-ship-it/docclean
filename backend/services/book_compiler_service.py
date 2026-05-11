@@ -202,7 +202,7 @@ def _llm_match_file(md_title, md_content_preview, outline_text, config):
     """
     import time
 
-    prompt = f"""你是餐饮知识库内容分类专家。
+    prompt = f"""你是知识库内容分类专家，精通多行业文档的语义理解和归类。
 
 【任务】判断以下文章内容应该归到大纲的哪个最细级别章节下（可多选，最多3个）。
 
@@ -441,19 +441,20 @@ def _extract_section_keywords(title):
         return []
 
     # 泛词表：这些词出现在几乎所有文章里，没有区分度
+    # 注意：已移除行业专用词（如餐饮、门店等），保持跨行业通用
     STOP_WORDS = {
-        '产品', '服务', '体验', '用户', '顾客', '客户', '消费', '餐饮', '门店', '餐厅',
+        '产品', '服务', '体验', '用户', '顾客', '客户', '消费',
         '品牌', '核心', '能力', '管理', '运营', '系统', '设计', '策略', '方式', '方案',
         '模式', '标准', '提升', '优化', '数据', '指标', '成本', '效率', '价格', '质量',
         '市场', '平台', '渠道', '内容', '结构', '流程', '规则', '机制', '影响', '情况',
         '效果', '目标', '需求', '场景', '资源', '活动', '工具', '技术', '信息', '问题',
         '方法', '条件', '关键', '方面', '过程', '水平', '阶段', '计划', '经营', '业务',
-        '基础', '环境', '空间', '时间', '行业', '企业', '公司', '团队', '人员', '老板',
+        '基础', '环境', '空间', '时间', '行业', '企业', '公司', '团队', '人员',
         '通过', '进行', '实现', '包括', '确保', '建立', '根据', '利用', '识别', '排查',
         '以及', '其中', '对于', '可以', '等等', '如何', '什么', '怎么', '为什么',
         '这些', '那些', '不是', '就是', '还是', '或者', '并且', '而且',
         '竞争', '对手', '形成', '感知', '区别', '阻止', '模仿',
-        '检查', '记录', '清洁', '每日',
+        '检查', '记录', '每日',
     }
 
     keywords = []
@@ -549,7 +550,7 @@ def match_by_filename(sections, md_files):
 # 7. 生成最终的书 .md（增强版：清洗内容、只保留正文）
 # ============================================================
 
-def build_book_markdown(sections, book_title="餐饮运营知识大全"):
+def build_book_markdown(sections, book_title="知识库书籍"):
     """
     按大纲顺序拼接所有章节和匹配到的内容，生成最终的书 .md。
     自动清洗无关内容（链接、日期等）。
@@ -616,12 +617,12 @@ def compile_book(docx_path, output_folder, file_records, book_title=None, out_pa
         progress_callback:  进度回调 fn(current, total, title)
     """
     if not os.path.exists(docx_path):
-        return {"success": False, "message": f"大纲文件不存在：{docx_path}"}
+        return {"success": False, "message": f"Outline file not found: {docx_path}"}
 
     # 1. 解析大纲
     sections = parse_word_outline(docx_path)
     if not sections:
-        return {"success": False, "message": "大纲文件中没有找到有效的编号章节（如 1.1、2.3）"}
+        return {"success": False, "message": "No valid numbered sections found in outline file (e.g. 1.1, 2.3)"}
 
     # 2. 读取 md 文件
     md_files = load_md_files(output_folder, file_records)

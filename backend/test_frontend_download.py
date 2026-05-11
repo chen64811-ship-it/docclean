@@ -37,7 +37,7 @@ print(f"    download_url = {download_url}")
 
 # 步骤2：模拟前端JS构造URL
 # 前端代码：API + '/download-book/' + encodeURIComponent(filename)
-filename = download_url.split("/")[-1]  # "餐饮运营知识大全-目录V3.0.md"
+filename = download_url.split("/")[-1]  # 从 download_url 中提取文件名
 encoded_filename = urllib.parse.quote(filename)  # 相当于 JS 的 encodeURIComponent
 frontend_url = BASE + "/api/download-book/" + encoded_filename
 print(f"\n[2] 前端构造的URL:")

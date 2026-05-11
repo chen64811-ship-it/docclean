@@ -124,8 +124,8 @@ except Exception as e:
 # ---- 测试5：确认输出文件存在并是 .md ----
 print("\n[5] 检查输出文件...")
 output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "outputs")
-book_files = [f for f in os.listdir(output_dir) if "餐饮" in f and f.endswith(".md")]
-test("outputs/ 中有合成书 .md 文件", len(book_files) > 0, "未找到餐饮相关 .md 文件")
+book_files = [f for f in os.listdir(output_dir) if f.endswith(".md") and not all(c in "0123456789abcdef-" for c in f.replace(".md", ""))]
+test("outputs/ 中有合成书 .md 文件", len(book_files) > 0, "未找到合成书 .md 文件")
 for bf in book_files:
     print(f"    找到: {bf}")
     fpath = os.path.join(output_dir, bf)

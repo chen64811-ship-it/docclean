@@ -22,31 +22,52 @@ from config import OUTPUT_FOLDER
 
 def _is_garbage_text(text):
     """
-    判断提取的文字是否为乱码/垃圾内容（扫描件误识别）
+    判断提取的文字是否为乱码/垃圾内容（语言无关，中英文均适用）
+
+    核心思路：
+    - 统计有意义的文字字符（中文 + 拉丁字母 + 数字）
+    - 有意义字符占比太低 → 乱码
+    - 有意义字符总数太少 → 无有效内容，需 OCR
+    - 不再依赖"中文字符比例"来判断，纯英文不会误判为乱码
+
     返回 True 表示需要走 OCR
     """
     if not text or len(text.strip()) < 5:
         return True
 
-    # 统计中文字符比例
-    chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
+    # 统计各类有意义字符
+    cjk_chars = len(re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', text))
+    latin_chars = len(re.findall(r'[a-zA-Z]', text))
+    digit_chars = len(re.findall(r'[0-9]', text))
+    meaningful = cjk_chars + latin_chars + digit_chars
     total_chars = len(text.strip())
-    chinese_ratio = chinese_chars / total_chars if total_chars > 0 else 0
 
-    # 如果中文字符占比低于 30%，极可能是乱码
-    if chinese_ratio < 0.30 and chinese_chars > 0:
+    if total_chars == 0:
         return True
 
-    # 如果全是标点符号或ASCII，也是乱码
-    meaningful = len(re.findall(r'[\u4e00-\u9fff}a-zA-Z0-9]', text))
-    if meaningful < len(text.strip()) * 0.30:
+    # 有意义字符占比（中 + 英 + 数字 都算有意义）
+    meaningful_ratio = meaningful / total_chars
+
+    # 有意义字符占比低于 25% → 乱码（标点/符号太多）
+    if meaningful_ratio < 0.25:
         return True
 
-    # 如果提取的文字太短（少于20个有意义字符），大概率是扫描件
-    if meaningful < 20:
+    # 有意义字符总数太少 → 内容不足，需要 OCR
+    if meaningful < 15:
         return True
 
-    return False
+    # 英文文档：拉丁字符占主导，不需要中文来验证
+    # 只要有意义字符比例足够，就不判为垃圾
+    if latin_chars > 0 and cjk_chars == 0:
+        # 纯英文文档：拉丁字符 >= 40% 就是正常内容
+        if latin_chars / total_chars >= 0.30:
+            return False
+
+    # 中英混合或纯中文：有意义字符足够就不判为垃圾
+    if meaningful >= 20:
+        return False
+
+    return True
 
 
 def _extract_pdfminer_page(file_path, page_num):
@@ -160,9 +181,11 @@ def _pdf_page_worker(args):
 def _ocr_pdf_page_worker(args):
     """
     对单个 PDF 页面进行 OCR 识别（GPU 加速版）
-    使用全局 OCR 实例 + 线程锁保证线程安全
+    根据检测到的语言选择对应的 OCR 模型
+
+    args: (file_path, page_num, lang)
     """
-    file_path, page_num = args
+    file_path, page_num, lang = args
     tmp_img = None
     try:
         import fitz
@@ -176,9 +199,9 @@ def _ocr_pdf_page_worker(args):
         pix.save(tmp_img)
         doc.close()
 
-        # 调用 OCR 服务（内部使用 GPU 加速）
+        # 调用 OCR 服务（使用检测到的语言）
         from services.ocr_service import ocr_image
-        text = ocr_image(tmp_img)
+        text = ocr_image(tmp_img, lang=lang)
         return (page_num, text)
     except Exception:
         return (page_num, "")
@@ -190,12 +213,15 @@ def _ocr_pdf_page_worker(args):
 
 def extract_text_from_pdf(file_path, file_id=None):
     """
-    PDF 提取文字（多进程加速）
+    PDF 提取文字（多进程加速 + 语言自动检测）
     策略：pdfminer.six 主提取 -> PyMuPDF 补漏 -> 并行 OCR 兜底（扫描件）
+    V2：自动检测文档语言，英文文档使用英文 OCR 模型
     """
     try:
         import fitz
         from progress_store import set_progress
+        from services.ocr_service import detect_language
+
         # OCR 可用性检查：失败时不阻塞普通文本 PDF 的提取
         is_gpu = False
         ocr_available = False
@@ -204,7 +230,7 @@ def extract_text_from_pdf(file_path, file_id=None):
             is_gpu = is_gpu_available()
             ocr_available = True
         except Exception as ocr_err:
-            print(f"[OCR] 当前不可用，仅使用文本提取策略：{ocr_err}")
+            print(f"[OCR] Not available, using text extraction only: {ocr_err}")
 
         doc = fitz.open(file_path)
         total_pages = len(doc)
@@ -212,17 +238,22 @@ def extract_text_from_pdf(file_path, file_id=None):
         if total_pages == 0:
             return ""
 
-        # 先用 pdfminer.six 整体提取（对中文最有效）
+        # 先用 pdfminer.six 整体提取
         if file_id is not None:
-            set_progress(file_id, 100, 5, "提取文字...")
+            set_progress(file_id, 100, 5, "Extracting text...")
         full_text = _extract_pdfminer_full(file_path)
+
+        # 检测文档语言（用于后续 OCR 模型选择）
+        doc_lang = detect_language(full_text) if full_text else "en"
+        lang_label = {"en": "English", "ch": "Chinese", "mixed": "Chinese+English"}.get(doc_lang, "English")
+        print(f"[Lang] Detected document language: {lang_label} → using '{doc_lang}' OCR model")
 
         if full_text and len(full_text.strip()) > 20 and not _is_garbage_text(full_text):
             # pdfminer 提取成功且内容质量好，直接使用
             if file_id is not None:
-                set_progress(file_id, 100, 80, "清洗数据...")
+                set_progress(file_id, 100, 80, "Cleaning data...")
             if file_id is not None:
-                set_progress(file_id, 100, 100, "解析完成")
+                set_progress(file_id, 100, 100, "Parse complete")
             return full_text
 
         # pdfminer 不够（内容太少或质量差），用多进程逐页提取 + OCR兜底
@@ -245,9 +276,9 @@ def extract_text_from_pdf(file_path, file_id=None):
                 if file_id is not None:
                     done_count = len(pages_text) + len(pages_need_ocr)
                     pct = int(done_count / total_pages * 50)
-                    set_progress(file_id, 100, pct, f"提取第 {done_count}/{total_pages} 页")
+                    set_progress(file_id, 100, pct, f"Extracting page {done_count}/{total_pages}")
 
-        # 并行 OCR 无文字页面（扫描件走这里）
+        # 并行 OCR 无文字页面（扫描件）
         # GPU 加速：用线程池代替进程池，GPU 共享资源更适合多线程
         if pages_need_ocr and ocr_available:
             ocr_total = len(pages_need_ocr)
@@ -255,8 +286,9 @@ def extract_text_from_pdf(file_path, file_id=None):
             # GPU 模式下用更多线程并行 OCR
             max_ocr_workers = min(cpu_count() * 2, ocr_total, 16) if is_gpu else min(cpu_count(), ocr_total, 8)
             with ThreadPoolExecutor(max_workers=max_ocr_workers) as executor:
+                # 传递检测到的语言到 OCR 工作线程
                 futures = {
-                    executor.submit(_ocr_pdf_page_worker, (file_path, p)): p
+                    executor.submit(_ocr_pdf_page_worker, (file_path, p, doc_lang)): p
                     for p in pages_need_ocr
                 }
                 for future in as_completed(futures):
@@ -265,7 +297,7 @@ def extract_text_from_pdf(file_path, file_id=None):
                     pages_text[page_num] = text if text else ""
                     if file_id is not None:
                         pct = 50 + int(ocr_done / ocr_total * 50)
-                        set_progress(file_id, 100, pct, f"OCR识别 {ocr_done}/{ocr_total} 页")
+                        set_progress(file_id, 100, pct, f"OCR ({lang_label}) {ocr_done}/{ocr_total} pages")
         elif pages_need_ocr and not ocr_available:
             # OCR 不可用时，这些页无法识别，保留为空，后续统一给出清晰错误
             for p in pages_need_ocr:
@@ -276,11 +308,11 @@ def extract_text_from_pdf(file_path, file_id=None):
         for i in range(total_pages):
             text = pages_text.get(i, "")
             if text and text.strip():
-                parts.append(f"## 第 {i+1} 页\n{text.strip()}")
+                parts.append(f"## Page {i+1}\n{text.strip()}")
         result = "\n\n".join(parts) if parts else ""
 
         if not result.strip() and pages_need_ocr and not ocr_available:
-            raise Exception("PDF 解析失败：当前环境缺少 OCR 依赖（paddle/paddleocr），且该 PDF 需要 OCR 才能识别内容")
+            raise Exception("PDF parse failed: OCR dependencies (paddle/paddleocr) are required for this scanned PDF")
 
         if file_id is not None:
             set_progress(file_id, 100, 100, "解析完成")
@@ -289,8 +321,8 @@ def extract_text_from_pdf(file_path, file_id=None):
     except Exception as e:
         if file_id is not None:
             from progress_store import set_progress
-            set_progress(file_id, 100, 100, "解析失败")
-        raise Exception(f"PDF 解析失败：{str(e)}")
+            set_progress(file_id, 100, 100, "Parse failed")
+        raise Exception(f"PDF parse failed: {str(e)}")
 
 
 # ========== Word (docx) 提取（保留格式和图片）==========
@@ -434,7 +466,7 @@ def extract_text_from_docx(file_path, output_base_dir=None):
 
     except Exception as e:
         traceback.print_exc()
-        raise Exception(f"Word 文档解析失败：{str(e)}")
+        raise Exception(f"Word parse failed: {str(e)}")
 
 
 # ========== Excel 提取 ==========
@@ -469,7 +501,7 @@ def extract_text_from_xlsx(file_path):
 
     except Exception as e:
         traceback.print_exc()
-        raise Exception(f"Excel 文件解析失败：{str(e)}")
+        raise Exception(f"Excel parse failed: {str(e)}")
 
 
 # ========== Markdown 读取 ==========
@@ -480,15 +512,20 @@ def extract_text_from_markdown(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
     except Exception as e:
-        raise Exception(f"Markdown 文件读取失败：{str(e)}")
+        raise Exception(f"Markdown file read failed: {str(e)}")
 
 
 # ========== 图片 OCR ==========
 
-def extract_text_from_image(file_path):
-    """图片 OCR 文字识别"""
+def extract_text_from_image(file_path, lang="en"):
+    """
+    图片 OCR 文字识别
+    参数：
+        file_path: 图片路径
+        lang: OCR 语言模型 — "en"（英文，默认）、"ch"（中文）
+    """
     from services.ocr_service import ocr_image
-    return ocr_image(file_path)
+    return ocr_image(file_path, lang=lang)
 
 
 # ========== 统一入口 ==========
@@ -518,7 +555,7 @@ def extract_text(file_path, file_ext, file_id=None):
 
     extractor = extractors.get(file_ext.lower())
     if not extractor:
-        raise Exception(f"不支持的文件格式：.{file_ext}")
+        raise Exception(f"Unsupported file format: .{file_ext}")
 
     return extractor(file_path)
 
@@ -527,10 +564,10 @@ def _docx_with_progress(file_path, file_id):
     """docx 带进度上报"""
     from progress_store import set_progress
     if file_id is not None:
-        set_progress(file_id, 100, 30, "解析 Word 文档...")
+        set_progress(file_id, 100, 30, "Parsing Word document...")
     result = extract_text_from_docx(file_path)
     if file_id is not None:
-        set_progress(file_id, 100, 80, "处理完成")
+        set_progress(file_id, 100, 80, "Done")
     return result
 
 
@@ -538,19 +575,21 @@ def _xlsx_with_progress(file_path, file_id):
     """xlsx 带进度上报"""
     from progress_store import set_progress
     if file_id is not None:
-        set_progress(file_id, 100, 50, "解析 Excel...")
+        set_progress(file_id, 100, 50, "Parsing Excel...")
     result = extract_text_from_xlsx(file_path)
     if file_id is not None:
-        set_progress(file_id, 100, 90, "处理完成")
+        set_progress(file_id, 100, 90, "Done")
     return result
 
 
 def _image_with_progress(file_path, file_id):
-    """图片 OCR 带进度上报"""
+    """图片 OCR 带进度上报（使用配置的默认语言）"""
     from progress_store import set_progress
+    from config import OCR_LANG
     if file_id is not None:
-        set_progress(file_id, 100, 20, "OCR 识别中...")
-    result = extract_text_from_image(file_path)
+        lang_label = "English" if OCR_LANG == "en" else "Chinese"
+        set_progress(file_id, 100, 20, f"OCR in progress ({lang_label})...")
+    result = extract_text_from_image(file_path, lang=OCR_LANG)
     if file_id is not None:
-        set_progress(file_id, 100, 90, "识别完成")
+        set_progress(file_id, 100, 90, "OCR complete")
     return result

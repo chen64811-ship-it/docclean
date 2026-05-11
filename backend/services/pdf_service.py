@@ -9,14 +9,26 @@ from io import BytesIO
 
 
 # ──────────────────────────────────────────────
-# 查找微软雅黑字体路径（Windows 系统自带）
+# 查找可用的中文字体（Windows / macOS / Linux / Docker）
 # ──────────────────────────────────────────────
 def _find_msyh():
     candidates = [
+        # Windows 系统自带微软雅黑
         r"C:\Windows\Fonts\msyh.ttc",
         r"C:\Windows\Fonts\MSYH.TTC",
         r"C:\Windows\Fonts\msyh.ttf",
         r"C:\Windows\Fonts\MSYH.TTF",
+        # macOS 系统自带中文字体
+        "/System/Library/Fonts/PingFang.ttc",
+        "/System/Library/Fonts/STHeiti Light.ttc",
+        "/System/Library/Fonts/STHeiti Medium.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        # Linux / Docker 常见中文字体
+        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+        "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
     ]
     for p in candidates:
         if os.path.exists(p):

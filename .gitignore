@@ -7,6 +7,8 @@ __pycache__/
 outputs/
 uploads/
 .env
+llm_config.json
+license.json
 *.log
 _tmp_*.png
 *.tmp

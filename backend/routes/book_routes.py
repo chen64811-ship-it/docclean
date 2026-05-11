@@ -37,17 +37,49 @@ def get_resolved_base_dir():
 @book_bp.route("/api/compile-book", methods=["POST"])
 def api_compile_book():
     """
-    合成书接口。
-
-    请求体（JSON）：
-        {
-            "docx_path": "C:/xxx/餐饮运营知识大全-目录V3.0.docx",  // 大纲Word文件的绝对路径
-            "book_title": "餐饮运营知识大全",                         // 可选，书名
-            "file_ids": [1, 2, 3]                                    // 可选，只用这几个文件；不传则用全部已完成文件
-        }
-
-    返回：
-        { "success": true, "book_title": "...", "matched_count": N, "total_sections": M, "download_url": "/api/download-book/xxx.md" }
+    Compile a book from a Word outline (.docx) by matching section headings against converted Markdown files.
+    Sections in the outline like "1.1 Topic" are matched to Markdown chunks with the same title.
+    ---
+    tags:
+      - Book Compiler
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - docx_path
+          properties:
+            docx_path:
+              type: string
+              description: Absolute path to the Word outline file (.docx)
+            book_title:
+              type: string
+              description: Book title (optional, derived from filename if empty)
+            file_ids:
+              type: array
+              items:
+                type: integer
+              description: Specific file IDs to include (optional, uses all completed files if empty)
+    responses:
+      200:
+        description: Book compiled successfully with download URL
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            book_title:
+              type: string
+            matched_count:
+              type: integer
+            total_sections:
+              type: integer
+            download_url:
+              type: string
+      400:
+        description: Missing or invalid outline file
     """
     data = request.get_json(silent=True) or {}
 
@@ -64,14 +96,14 @@ def api_compile_book():
                 break
 
     if not docx_path:
-        return jsonify({"success": False, "message": "请提供大纲 Word 文件路径（docx_path）"}), 400
+        return jsonify({"success": False, "message": "Please provide outline Word file path (docx_path)"}), 400
 
     # 安全校验：路径必须以 .docx 结尾，防止路径穿越
     if not docx_path.lower().endswith(".docx"):
-        return jsonify({"success": False, "message": "大纲文件必须是 .docx 格式"}), 400
+        return jsonify({"success": False, "message": "Outline file must be .docx format"}), 400
 
     if not os.path.exists(docx_path):
-        return jsonify({"success": False, "message": f"文件不存在：{docx_path}"}), 400
+        return jsonify({"success": False, "message": f"File not found: {docx_path}"}), 400
 
     # 获取数据库记录
     all_records = get_all_files()
@@ -84,7 +116,7 @@ def api_compile_book():
         records = [r for r in all_records if r.get("status") == "done"]
 
     if not records:
-        return jsonify({"success": False, "message": "没有已完成的文件可以合成，请先上传并解析文件"}), 400
+        return jsonify({"success": False, "message": "No completed files to compile. Upload and parse files first."}), 400
 
     # 执行合成
     result = compile_book(
@@ -110,7 +142,7 @@ def download_book(filename):
     """
     # 安全校验：只允许 .md 文件，不允许路径穿越
     if not filename.endswith(".md") or ".." in filename or "/" in filename or "\\" in filename:
-        return jsonify({"error": "非法文件名"}), 400
+        return jsonify({"error": "Invalid filename"}), 400
 
     file_path = os.path.join(OUTPUT_FOLDER, filename)
     if not os.path.exists(file_path):
@@ -126,7 +158,7 @@ def get_book_content(filename):
     """
     # 安全校验
     if not filename.endswith(".md") or ".." in filename or "/" in filename or "\\" in filename:
-        return jsonify({"success": False, "message": "非法文件名"}), 400
+        return jsonify({"success": False, "message": "Invalid filename"}), 400
 
     file_path = os.path.join(OUTPUT_FOLDER, filename)
     if not os.path.exists(file_path):
@@ -145,7 +177,7 @@ def save_book_content(filename):
     """
     # 安全校验
     if not filename.endswith(".md") or ".." in filename or "/" in filename or "\\" in filename:
-        return jsonify({"success": False, "message": "非法文件名"}), 400
+        return jsonify({"success": False, "message": "Invalid filename"}), 400
 
     file_path = os.path.join(OUTPUT_FOLDER, filename)
     if not os.path.exists(file_path):
@@ -154,12 +186,12 @@ def save_book_content(filename):
     data = request.get_json(silent=True) or {}
     content = data.get("content", "")
     if not content:
-        return jsonify({"success": False, "message": "内容不能为空"}), 400
+        return jsonify({"success": False, "message": "Content cannot be empty"}), 400
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    return jsonify({"success": True, "message": "保存成功"})
+    return jsonify({"success": True, "message": "Saved successfully"})
 
 
 @book_bp.route("/api/list-books", methods=["GET"])
