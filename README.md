@@ -74,7 +74,7 @@ Most document conversion tools (Mathpix, Docparser, Smallpdf) require uploading 
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/docclean.git
+git clone https://github.com/chen64811-ship-it/docclean.git
 cd docclean
 
 # 2. Create your config file
@@ -112,7 +112,7 @@ See [deploy/nginx/docclean.conf](deploy/nginx/docclean.conf) for a ready-to-use 
 
 ```bash
 # 1. Clone and enter the project
-git clone https://github.com/yourusername/docclean.git
+git clone https://github.com/chen64811-ship-it/docclean.git
 cd docclean
 
 # 2. Install dependencies
