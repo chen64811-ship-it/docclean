@@ -36,6 +36,8 @@ services:
       - ./outputs:/app/outputs
       # Config file (read-only mount, prevents accidental modification inside container)
       - ./backend/.env:/app/backend/.env:ro
+      # Load .env as environment variables (docker restart won't re-read the file)
+      env_file: ./backend/.env
     restart: unless-stopped
     # GPU users: uncomment the 6 lines below to enable GPU acceleration
     # deploy:
