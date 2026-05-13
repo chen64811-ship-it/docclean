@@ -1,29 +1,28 @@
 # -*- coding: utf-8 -*-
 """
-Markdown → PDF 导出服务
-使用 fpdf2 直接渲染，读取 Windows 系统微软雅黑字体，不依赖任何外部系统库
+Markdown -> PDF Export Service
+Uses fpdf2 for direct rendering, reads system fonts (Microsoft YaHei on Windows, fallbacks on macOS/Linux/Docker).
+No external system library dependencies.
 """
 import re
 import os
 from io import BytesIO
 
 
-# ──────────────────────────────────────────────
-# 查找可用的中文字体（Windows / macOS / Linux / Docker）
-# ──────────────────────────────────────────────
+# Find available CJK font (Windows / macOS / Linux / Docker)
 def _find_msyh():
     candidates = [
-        # Windows 系统自带微软雅黑
+        # Windows built-in Microsoft YaHei
         r"C:\Windows\Fonts\msyh.ttc",
         r"C:\Windows\Fonts\MSYH.TTC",
         r"C:\Windows\Fonts\msyh.ttf",
         r"C:\Windows\Fonts\MSYH.TTF",
-        # macOS 系统自带中文字体
+        # macOS built-in CJK fonts
         "/System/Library/Fonts/PingFang.ttc",
         "/System/Library/Fonts/STHeiti Light.ttc",
         "/System/Library/Fonts/STHeiti Medium.ttc",
         "/Library/Fonts/Arial Unicode.ttf",
-        # Linux / Docker 常见中文字体
+        # Linux / Docker common CJK fonts
         "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
@@ -36,38 +35,34 @@ def _find_msyh():
     return None
 
 
-# ──────────────────────────────────────────────
-# 去除行内 Markdown 标记，返回纯文本
-# ──────────────────────────────────────────────
+# Strip inline Markdown markers, return plain text
 def _clean(s):
-    s = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', s)   # 粗斜体
-    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)         # 粗体
-    s = re.sub(r'__(.+?)__', r'\1', s)             # 粗体（下划线）
-    s = re.sub(r'\*(.+?)\*', r'\1', s)             # 斜体
-    s = re.sub(r'_(.+?)_', r'\1', s)               # 斜体（下划线）
-    s = re.sub(r'`(.+?)`', r'\1', s)               # 行内代码
-    s = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', s)      # 链接
-    s = re.sub(r'~~(.+?)~~', r'\1', s)             # 删除线
-    s = re.sub(r'!\[.+?\]\(.+?\)', '', s)          # 图片（忽略）
+    s = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', s)   # bold+italic
+    s = re.sub(r'\*\*(.+?)\*\*', r'\1', s)         # bold
+    s = re.sub(r'__(.+?)__', r'\1', s)             # bold (underscore)
+    s = re.sub(r'\*(.+?)\*', r'\1', s)             # italic
+    s = re.sub(r'_(.+?)_', r'\1', s)               # italic (underscore)
+    s = re.sub(r'`(.+?)`', r'\1', s)               # inline code
+    s = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', s)      # links
+    s = re.sub(r'~~(.+?)~~', r'\1', s)             # strikethrough
+    s = re.sub(r'!\[.+?\]\(.+?\)', '', s)          # images (skip)
     return s.strip()
 
 
-# ──────────────────────────────────────────────
-# 主函数：Markdown → PDF 字节流
-# ──────────────────────────────────────────────
+# Main function: Markdown -> PDF byte stream
 def markdown_to_pdf(md_text, title=None):
     """
-    将 Markdown 字符串转为 PDF，返回 bytes 字节流。
-    支持：H1-H6、段落、无序/有序列表、嵌套列表、代码块、表格、引用、分隔线
+    Convert Markdown string to PDF, return bytes.
+    Supports: H1-H6, paragraphs, unordered/ordered lists, nested lists, code blocks, tables, blockquotes, horizontal rules.
     """
     from fpdf import FPDF
 
-    # ── 初始化 PDF ──
+    # Initialize PDF
     pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.set_margins(left=20, top=20, right=20)
     pdf.set_auto_page_break(auto=True, margin=22)
 
-    # ── 注册微软雅黑字体 ──
+    # Register CJK font
     font_path = _find_msyh()
     if font_path:
         try:
@@ -79,13 +74,13 @@ def markdown_to_pdf(md_text, title=None):
     else:
         FONT = 'helvetica'
 
-    PAGE_W = 170  # A4(210mm) - 左右边距各20mm
+    PAGE_W = 170  # A4 (210mm) - 20mm margins each side
 
     pdf.add_page()
 
-    # ── 辅助函数 ──
+    # Helper functions
     def write_text(text, size=11, bold=False, indent=0, lh=7, fill=False, fill_color=None):
-        """写一段文字（支持自动换行）"""
+        """Write a block of text (supports automatic line wrapping)."""
         style = 'B' if bold else ''
         pdf.set_font(FONT, style, size)
         if fill and fill_color:
@@ -111,7 +106,7 @@ def markdown_to_pdf(md_text, title=None):
         pdf.ln(3 if level <= 2 else 2)
         write_text(text, size=size, bold=bold, lh=lh)
         if level == 1:
-            # H1 下方画一条浅线
+            # Draw a subtle line below H1
             pdf.set_draw_color(102, 126, 234)
             pdf.set_line_width(0.4)
             pdf.line(20, pdf.get_y(), 190, pdf.get_y())
@@ -120,11 +115,11 @@ def markdown_to_pdf(md_text, title=None):
         pdf.ln(1)
 
     def write_table(t_lines):
-        """渲染 Markdown 表格"""
+        """Render Markdown table."""
         rows = []
         for tl in t_lines:
             stripped = tl.strip()
-            # 跳过分隔行 |---|---|
+            # Skip separator rows |---|---|
             if re.match(r'^\|[\s\-|:]+\|$', stripped):
                 continue
             cells = [_clean(c.strip()) for c in stripped.strip('|').split('|')]
@@ -136,7 +131,7 @@ def markdown_to_pdf(md_text, title=None):
         col_w = PAGE_W / n_cols
 
         for ri, row in enumerate(rows):
-            # 计算本行最大行高（内容最多的单元格）
+            # Calculate max row height (widest cell)
             is_header = (ri == 0)
             pdf.set_font(FONT, 'B' if is_header else '', 10)
             row_h = 7
@@ -144,7 +139,7 @@ def markdown_to_pdf(md_text, title=None):
             x_start = 20
             y_start = pdf.get_y()
 
-            # 检查是否接近页底，提前换页
+            # Check if near page bottom, add new page if needed
             if y_start + row_h > pdf.h - 22:
                 pdf.add_page()
                 y_start = pdf.get_y()
@@ -160,20 +155,19 @@ def markdown_to_pdf(md_text, title=None):
         pdf.ln(4)
 
     def write_code_block(code_lines):
-        """渲染代码块"""
+        """Render code block."""
         if not code_lines:
             return
         pdf.set_font(FONT, '', 9)
         pdf.set_fill_color(248, 249, 255)
-        content = '\n'.join(code_lines)
-        # 每行单独写，保证不裁剪
+        # Write each line individually to avoid clipping
         for cl in code_lines:
             pdf.set_x(22)
             pdf.set_fill_color(248, 249, 255)
             pdf.multi_cell(PAGE_W - 4, 5.5, cl, fill=True)
         pdf.ln(2)
 
-    # ── 逐行解析 ──
+    # Line-by-line parsing
     lines = md_text.split('\n')
     i = 0
     in_code = False
@@ -182,7 +176,7 @@ def markdown_to_pdf(md_text, title=None):
     while i < len(lines):
         line = lines[i]
 
-        # 代码围栏
+        # Code fence
         if re.match(r'^```', line):
             if not in_code:
                 in_code = True
@@ -200,7 +194,7 @@ def markdown_to_pdf(md_text, title=None):
 
         stripped = line.strip()
 
-        # 表格（收集连续的表格行）
+        # Table (collect consecutive table rows)
         if stripped.startswith('|'):
             t_lines = []
             while i < len(lines) and lines[i].strip().startswith('|'):
@@ -209,13 +203,13 @@ def markdown_to_pdf(md_text, title=None):
             write_table(t_lines)
             continue
 
-        # 空行
+        # Blank line
         if not stripped:
             pdf.ln(3)
             i += 1
             continue
 
-        # 分隔线
+        # Horizontal rule
         if re.match(r'^[-*_]{3,}$', stripped):
             pdf.set_draw_color(200, 200, 200)
             pdf.set_line_width(0.3)
@@ -226,7 +220,7 @@ def markdown_to_pdf(md_text, title=None):
             i += 1
             continue
 
-        # 标题
+        # Heading
         m = re.match(r'^(#{1,6})\s+(.*)', stripped)
         if m:
             level = len(m.group(1))
@@ -234,7 +228,7 @@ def markdown_to_pdf(md_text, title=None):
             i += 1
             continue
 
-        # 引用块
+        # Blockquote
         if stripped.startswith('> '):
             y0 = pdf.get_y()
             write_text(stripped[2:], size=11, indent=8, fill=True, fill_color=(248, 249, 255))
@@ -247,16 +241,16 @@ def markdown_to_pdf(md_text, title=None):
             i += 1
             continue
 
-        # 无序列表（支持 -, *, +）
+        # Unordered list (supports -, *, +)
         m = re.match(r'^(\s*)([-*+])\s+(.*)', line)
         if m:
             indent_lvl = len(m.group(1)) // 2
-            bullet = '•' if indent_lvl == 0 else ('◦' if indent_lvl == 1 else '▪')
+            bullet = '\u2022' if indent_lvl == 0 else ('\u25e6' if indent_lvl == 1 else '\u25aa')
             write_text(f'{bullet} {m.group(3)}', size=11, indent=5 + indent_lvl * 5)
             i += 1
             continue
 
-        # 有序列表
+        # Ordered list
         m = re.match(r'^(\s*)(\d+)[.)]\s+(.*)', line)
         if m:
             indent_lvl = len(m.group(1)) // 2
@@ -264,11 +258,11 @@ def markdown_to_pdf(md_text, title=None):
             i += 1
             continue
 
-        # 普通段落
+        # Regular paragraph
         write_text(stripped, size=11)
         i += 1
 
-    # ── 输出字节流 ──
+    # Output byte stream
     buf = BytesIO()
     pdf.output(buf)
     buf.seek(0)

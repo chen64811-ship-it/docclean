@@ -2,18 +2,18 @@
 """
 DocClean License Key System
 ============================
-为海外售卖提供 License Key 验证机制。
+License key verification for overseas distribution.
 
-License 分级：
-  free       — 基础功能（文件上传/转换/下载/编辑），无需 Key
-  pro        — 高级功能（RAG 知识库、AI 问答、批量处理）
-  enterprise — 全部功能（含书籍编译器），无限制
+License tiers:
+  free       — Basic features (upload/convert/download/edit), no key needed
+  pro        — Advanced features (RAG knowledge base, AI Q&A, batch processing)
+  enterprise — All features (including book compiler), no limits
 
-Key 格式：DOCLEAN-<payload_b64>-<signature_b64>
-  payload  = base64url(json)  例如 {"t":"pro","e":"2026-12-31","c":"user@example.com"}
+Key format: DOCLEAN-<payload_b64>-<signature_b64>
+  payload  = base64url(json)  e.g. {"t":"pro","e":"2026-12-31","c":"user@example.com"}
   signature = base64url(HMAC-SHA256(payload, SECRET))
 
-许可证文件：backend/license.json（通过 API 激活后自动生成）
+License file: backend/license.json (auto-generated after API activation)
 """
 import os
 import json
@@ -24,42 +24,46 @@ import time
 from datetime import datetime
 from config import BASE_DIR
 
-# ========== 密钥（生产环境请更换）==========
-_SECRET = b"docclean-2026-overseas-first-product"
+# ========== SECRET KEY ==========
+# Set via DOCLEAN_LICENSE_SECRET environment variable.
+# Generate one: python -c "import secrets; print(secrets.token_hex(32))"
+_SECRET = os.environ.get("DOCLEAN_LICENSE_SECRET", "").encode("utf-8")
+if not _SECRET:
+    raise RuntimeError(
+        "DOCLEAN_LICENSE_SECRET environment variable is required. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 
-# ========== 许可证文件路径 ==========
+# ========== License file path ==========
 LICENSE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "license.json")
 
-# ========== 功能分级定义 ==========
-# Free 功能：始终可用，无需 License
-# Pro 功能：需要 pro 及以上 License
-# Enterprise 功能：需要 enterprise License
+# ========== Feature tier definitions ==========
 FEATURE_TIERS = {
-    # 基础功能 — 永远免费
+    # Basic — always free
     "upload": "free",
     "convert": "free",
     "download": "free",
     "editor": "free",
     "pdf_export": "free",
     "tree_view": "free",
-    # 高级功能 — Pro
+    # Advanced — Pro
     "knowledge_base": "pro",
     "rag_search": "pro",
     "ai_qa": "pro",
     "batch_process": "pro",
-    # 企业功能 — Enterprise
+    # Enterprise
     "book_compiler": "enterprise",
     "api_access": "enterprise",
 }
 
 
 def _b64url_encode(data: bytes) -> str:
-    """Base64URL 编码（去掉末尾 =，替换 +/ 为 -_）"""
+    """Base64URL encode (strip padding, replace +/ with -_)"""
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
 def _b64url_decode(s: str) -> bytes:
-    """Base64URL 解码（补齐末尾 =）"""
+    """Base64URL decode (restore padding)"""
     padding = 4 - len(s) % 4
     if padding != 4:
         s += "=" * padding
@@ -68,26 +72,25 @@ def _b64url_decode(s: str) -> bytes:
 
 def generate_license_key(license_type: str, expiry_date: str, customer_email: str) -> str:
     """
-    生成一个 License Key（仅由卖方使用）
+    Generate a license key (used by seller only).
 
-    参数：
-        license_type: "pro" 或 "enterprise"
-        expiry_date: 到期日期，如 "2026-12-31"
-        customer_email: 客户邮箱
+    Args:
+        license_type: "pro" or "enterprise"
+        expiry_date: expiry date, e.g. "2026-12-31"
+        customer_email: customer email address
 
-    返回：
-        License Key 字符串，如 "DOCLEAN-eyJ0IjoicHJvIi..."
+    Returns:
+        License key string, e.g. "DOCLEAN-eyJ0IjoicHJvIi..."
     """
     payload = {
-        "t": license_type,         # type
-        "e": expiry_date,          # expiry
-        "c": customer_email,       # customer
-        "iat": int(time.time()),   # issued at
+        "t": license_type,
+        "e": expiry_date,
+        "c": customer_email,
+        "iat": int(time.time()),
     }
     payload_json = json.dumps(payload, separators=(",", ":"))
     payload_b64 = _b64url_encode(payload_json.encode("utf-8"))
 
-    # HMAC-SHA256 签名
     sig = hmac.new(_SECRET, payload_b64.encode("ascii"), hashlib.sha256).digest()
     sig_b64 = _b64url_encode(sig)
 
@@ -96,20 +99,18 @@ def generate_license_key(license_type: str, expiry_date: str, customer_email: st
 
 def verify_license_key(key: str) -> dict | None:
     """
-    验证 License Key 的有效性
+    Verify a license key's validity.
 
-    参数：
-        key: License Key 字符串（格式：DOCLEAN-<payload_b64>.<sig_b64>）
+    Args:
+        key: License key string (format: DOCLEAN-<payload_b64>.<sig_b64>)
 
-    返回：
-        有效 → {"type": "pro", "expiry": "2026-12-31", "customer": "user@example.com"}
-        无效 → None
+    Returns:
+        Valid → {"type": "pro", "expiry": "2026-12-31", "customer": "user@example.com"}
+        Invalid → None
     """
     if not key or not key.startswith("DOCLEAN-"):
         return None
 
-    # 格式：DOCLEAN-<payload_b64>.<signature_b64>
-    # base64url 不含 `.`，所以用 `.` 做分隔符绝对可靠
     try:
         after_prefix = key[len("DOCLEAN-"):]
         parts = after_prefix.rsplit(".", 1)
@@ -119,27 +120,24 @@ def verify_license_key(key: str) -> dict | None:
     except Exception:
         return None
 
-    # 验证签名
     expected_sig = hmac.new(_SECRET, payload_part.encode("ascii"), hashlib.sha256).digest()
     expected_sig_b64 = _b64url_encode(expected_sig)
 
     if expected_sig_b64 != sig_part:
         return None
 
-    # 解码 payload
     try:
         payload_json = _b64url_decode(payload_part).decode("utf-8")
         payload = json.loads(payload_json)
     except Exception:
         return None
 
-    # 检查过期
     expiry_str = payload.get("e", "")
     if expiry_str:
         try:
             expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d")
             if expiry_date < datetime.now():
-                return None  # 已过期
+                return None
         except ValueError:
             return None
 
@@ -152,9 +150,9 @@ def verify_license_key(key: str) -> dict | None:
 
 def load_license() -> dict:
     """
-    从本地文件加载已激活的 License 信息
+    Load activated license info from local file.
 
-    返回：
+    Returns:
         {
             "activated": True/False,
             "type": "free" / "pro" / "enterprise",
@@ -177,7 +175,6 @@ def load_license() -> dict:
     try:
         with open(LICENSE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # 检查存储的 license 是否过期
         type_ = data.get("type", "free")
         if type_ != "free":
             expiry = data.get("expiry", "")
@@ -185,7 +182,6 @@ def load_license() -> dict:
                 try:
                     expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
                     if expiry_date < datetime.now():
-                        # 过期了，降级为 free
                         save_license({"activated": False, "type": "free", "expiry": "", "customer": "", "activated_at": 0})
                         return default
                 except ValueError:
@@ -202,7 +198,7 @@ def load_license() -> dict:
 
 
 def save_license(info: dict):
-    """保存 License 信息到本地文件"""
+    """Save license info to local file."""
     try:
         file_path = os.path.abspath(LICENSE_FILE)
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -214,17 +210,15 @@ def save_license(info: dict):
 
 def activate_license(key: str) -> tuple[bool, str]:
     """
-    激活一个 License Key
+    Activate a license key.
 
-    返回：
+    Returns:
         (success, message)
     """
-    # 验证 Key 格式和签名
     license_info = verify_license_key(key)
     if not license_info:
         return False, "Invalid license key. Please check and try again."
 
-    # 保存到本地文件
     save_data = {
         "activated": True,
         "type": license_info["type"],
@@ -238,13 +232,13 @@ def activate_license(key: str) -> tuple[bool, str]:
 
 def check_feature(feature_name: str) -> bool:
     """
-    检查某个功能是否可用
+    Check if a feature is available under the current license.
 
-    参数：
-        feature_name: 功能名（如 "rag_search", "book_compiler"）
+    Args:
+        feature_name: feature name (e.g. "rag_search", "book_compiler")
 
-    返回：
-        True = 可用，False = 需要升级 License
+    Returns:
+        True = available, False = upgrade required
     """
     required_tier = FEATURE_TIERS.get(feature_name, "free")
     if required_tier == "free":
@@ -258,9 +252,7 @@ def check_feature(feature_name: str) -> bool:
 
 
 def get_license_status() -> dict:
-    """
-    获取当前 License 状态（给前端展示）
-    """
+    """Get current license status for frontend display."""
     info = load_license()
     return {
         "activated": info["activated"],

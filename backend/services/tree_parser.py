@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-树结构解析服务
-将 Markdown 内容解析为树形结构（节点：标题/页码/摘要）
-支持 PDF 格式（## 第 N 页）、Markdown 格式（# 标题层级）
+Tree Structure Parser Service
+Parses Markdown content into a tree structure (nodes: title/page/summary).
+Supports PDF format (## Page N), Markdown format (# heading levels).
 """
 import re
 import uuid
@@ -10,16 +10,17 @@ import uuid
 
 def classify_document_with_llm(md_content, file_name=""):
     """
-    调用 MiniMax LLM 对文档进行 AI 分类。
-    返回 {"doc_type": "...", "doc_category": "...", "description": "..."}
-    LLM 未配置或调用失败时返回 None。
+    Invoke the LLM to classify a document by type, category, and description.
+
+    Returns: {"doc_type": "...", "doc_category": "...", "description": "..."}
+    Returns None if LLM is not configured or call fails.
     """
     import os
     import sys
     import json
     import urllib.request
 
-    # 动态引入 config_manager（services 目录的上级 backend 目录）
+    # Dynamic import from backend directory (parent of services/)
     backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if backend_dir not in sys.path:
         sys.path.insert(0, backend_dir)
@@ -37,44 +38,44 @@ def classify_document_with_llm(md_content, file_name=""):
     if not api_key:
         return None
 
-    # 取前 5000 字作为文档样本（内容越多判断越准）
+    # Use first 5000 chars as document sample (more content = better accuracy)
     sample = md_content[:5000].strip()
     if not sample:
         return None
 
     prompt = (
-        "你是一个文档语义分析专家。请仔细阅读下方文档内容，从**文档的用途和本质**判断它属于哪种类型。\n\n"
-        "【判断标准（按用途，不按格式）】\n"
-        "- knowledge_doc：这份文档是为了「让人学习和理解某个领域知识」写的。\n"
-        "  典型特征：有概念解释、有原理说明、有方法论、读者是学习者。\n"
-        "  例：技术文档、行业知识库、教程、百科类文章。\n\n"
-        "- report：这份文档是为了「汇报某件事的结果或分析」写的。\n"
-        "  典型特征：有结论、有数据支撑、有时间周期、有分析对象。\n"
-        "  例：调研报告、项目复盘、市场分析、业绩总结。\n\n"
-        "- log：这份文档是为了「记录发生过什么事情/状态变化」写的。\n"
-        "  典型特征：按时间或事件排列、记录状态/进展/问题、没有结论导向。\n"
-        "  例：工作日志、运营记录、变更日志、执行状态表。\n\n"
-        "- readme：这份文档是为了「告诉用户怎么使用某个工具/项目/系统」写的。\n"
-        "  典型特征：有安装步骤、有使用说明、有接口描述、面向使用者。\n"
-        "  例：软件 README、部署手册、API 文档、使用指南。\n\n"
-        "- data_table：这份文档的核心内容是「结构化的数据或表格」，文字只是辅助。\n"
-        "  典型特征：大量表格/数字/字段名、行列关系、数据驱动。\n"
-        "  例：价格表、产品参数对比、数据报表、配置清单。\n\n"
-        "- general：以上类型都不明显符合，或者内容混杂无主导用途。\n\n"
-        "【严格要求】\n"
-        "1. 只看内容本质，不要被文件名或格式迷惑（.md 文件也可以是报告或日志）。\n"
-        "2. 选且只选一个最符合「主要用途」的类型。\n"
-        "3. doc_category 写这份文档所属的业务/技术领域，最多6个中文字，不要写类型名。\n"
-        "4. description 用一句话说清楚「这份文档具体讲什么」，最多25个字。\n\n"
-        f"【文件名】{file_name or '未知'}\n\n"
-        f"【文档内容节选】\n{sample}\n\n"
+        "You are a document semantic analysis expert. Read the following document content carefully and classify it by its PURPOSE and NATURE.\n\n"
+        "[Classification Criteria (by purpose, not format)]\n"
+        "- knowledge_doc: This document is written for 'people to learn and understand a domain of knowledge'.\n"
+        "  Typical traits: concept explanations, principle descriptions, methodology, the reader is a learner.\n"
+        "  Examples: technical docs, industry knowledge bases, tutorials, encyclopedia articles.\n\n"
+        "- report: This document is written to 'report the results or analysis of something'.\n"
+        "  Typical traits: conclusions, data support, time periods, subjects of analysis.\n"
+        "  Examples: research reports, project retrospectives, market analysis, performance summaries.\n\n"
+        "- log: This document is written to 'record events or status changes that occurred'.\n"
+        "  Typical traits: organized by time or event, records status/progress/issues, no conclusion orientation.\n"
+        "  Examples: work logs, operations records, changelogs, execution status tables.\n\n"
+        "- readme: This document is written to 'tell users how to use a tool/project/system'.\n"
+        "  Typical traits: installation steps, usage instructions, API descriptions, user-facing.\n"
+        "  Examples: software READMEs, deployment guides, API docs, user guides.\n\n"
+        "- data_table: The core content is 'structured data or tables', text is only supplementary.\n"
+        "  Typical traits: extensive tables/numbers/field names, row-column relationships, data-driven.\n"
+        "  Examples: price tables, product comparison charts, data reports, configuration lists.\n\n"
+        "- general: None of the above types clearly apply, or content is mixed with no dominant purpose.\n\n"
+        "[Strict Requirements]\n"
+        "1. Judge only by content nature — do not be misled by filename or format (.md files can also be reports or logs).\n"
+        "2. Select exactly ONE type that best matches the PRIMARY purpose.\n"
+        "3. doc_category: the business/technical domain this document belongs to, max 6 words, do NOT repeat the type name.\n"
+        "4. description: summarize what this document is about in one sentence, max 25 words.\n\n"
+        f"[Filename] {file_name or 'unknown'}\n\n"
+        f"[Document Excerpt]\n{sample}\n\n"
         "---\n"
-        "只返回如下 JSON，不要任何其他文字：\n"
-        '{{"doc_type": "<类型>", "doc_category": "<领域>", "description": "<一句话简介>"}}'
+        "Return ONLY the following JSON, no other text:\n"
+        '{{"doc_type": "<type>", "doc_category": "<domain>", "description": "<one-line summary>"}}'
     )
 
     try:
-        # 构造 API URL
+        # Build API URL
         api_base = config.get("api_base", "https://api.minimax.chat/v1").rstrip("/")
         if "/chat/completions" in api_base:
             url = api_base
@@ -87,7 +88,7 @@ def classify_document_with_llm(md_content, file_name=""):
             "model": config.get("model", "MiniMax-M2.7"),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.1,
-            "max_tokens": 2000   # 推理模型 <think> 标签会消耗大量 token，必须留足空间
+            "max_tokens": 2000   # reasoning model <think> tags consume many tokens, leave room
         }
 
         req = urllib.request.Request(
@@ -107,19 +108,19 @@ def classify_document_with_llm(md_content, file_name=""):
                 return None
             content = choices[0].get("message", {}).get("content", "").strip()
 
-        # 第1步：去掉 MiniMax 推理模型的 <think>...</think> 标签
+        # Step 1: strip MiniMax reasoning model <think>...</think> tags
         content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-        # 第2步：去掉可能的 ```json ... ``` 代码块包裹
+        # Step 2: strip possible ```json ... ``` code block wrappers
         content = re.sub(r'^```[a-zA-Z]*\s*', '', content)
         content = re.sub(r'\s*```$', '', content).strip()
-        # 第3步：从任意位置提取第一个完整 JSON 对象（最稳健）
+        # Step 3: extract first complete JSON object from anywhere in the text (most robust)
         json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
         if not json_match:
             return None
         content = json_match.group(0)
 
         classification = json.loads(content)
-        # 校验 doc_type 合法性
+        # Validate doc_type
         valid_types = {'knowledge_doc', 'report', 'log', 'readme', 'data_table', 'general'}
         doc_type = str(classification.get('doc_type', 'general'))
         if doc_type not in valid_types:
@@ -130,29 +131,29 @@ def classify_document_with_llm(md_content, file_name=""):
             'description': str(classification.get('description', ''))[:40]
         }
     except Exception:
-        # LLM 调用失败时静默忽略，不影响主流程
+        # LLM call failure is silently ignored — does not block main flow
         return None
 
 
 def parse_markdown_to_tree(md_content, file_name=""):
     """
-    将 Markdown 内容解析为树结构
+    Parse Markdown content into a tree structure.
 
-    返回：
+    Returns:
     {
         "id": "root",
-        "title": 文件名,
+        "title": filename,
         "type": "root",
         "children": [
             {
                 "id": "node_xxx",
-                "title": "第1页 / 第一章",
+                "title": "Page 1 / Chapter 1",
                 "type": "chapter|page",
                 "page_range": "1-3",
                 "page_start": 1,
                 "page_end": 3,
-                "summary": "本节摘要...",
-                "content_preview": "前200字...",
+                "summary": "Section summary...",
+                "content_preview": "First 200 chars...",
                 "children": []
             }
         ]
@@ -171,19 +172,19 @@ def parse_markdown_to_tree(md_content, file_name=""):
         line = lines[i]
         stripped = line.strip()
 
-        # 检测 PDF 页码标记：## 第 N 页
-        page_match = re.match(r'^##\s*第\s*(\d+)\s*页', stripped)
-        # 检测 Markdown 标题：# 标题
+        # Detect PDF page marker: ## Page N
+        page_match = re.match(r'^##\s*Page\s*(\d+)', stripped)
+        # Detect Markdown heading: # Title
         heading_match = re.match(r'^(#{1,4})\s+(.+)', stripped)
 
         if page_match:
             page_num = int(page_match.group(1))
-            # 收集该页的内容（去掉标题行）
+            # Collect page content (exclude heading line)
             page_lines = []
             j = i + 1
             while j < len(lines):
                 next_line = lines[j].strip()
-                next_page = re.match(r'^##\s*第\s*(\d+)\s*页', next_line)
+                next_page = re.match(r'^##\s*Page\s*(\d+)', next_line)
                 next_heading = re.match(r'^#{1,3}\s+', next_line)
                 if next_page or next_heading:
                     break
@@ -194,11 +195,11 @@ def parse_markdown_to_tree(md_content, file_name=""):
             node_counter += 1
             node_id = f"page_{page_num}"
 
-            # 计算该页结束页码（找相邻页码）
+            # Determine end page (look for next page marker)
             end_page = page_num
             k = j
             while k < len(lines):
-                nm = re.match(r'^##\s*第\s*(\d+)\s*页', lines[k].strip())
+                nm = re.match(r'^##\s*Page\s*(\d+)', lines[k].strip())
                 if nm:
                     end_page = int(nm.group(1)) - 1
                     break
@@ -206,7 +207,7 @@ def parse_markdown_to_tree(md_content, file_name=""):
 
             node = {
                 "id": node_id,
-                "title": f"第 {page_num} 页",
+                "title": f"Page {page_num}",
                 "type": "page",
                 "page_start": page_num,
                 "page_end": max(page_num, end_page),
@@ -222,7 +223,7 @@ def parse_markdown_to_tree(md_content, file_name=""):
         elif heading_match:
             level = len(heading_match.group(1))
             title = heading_match.group(2).strip()
-            # 收集该章节内容
+            # Collect section content
             section_lines = []
             j = i + 1
             while j < len(lines):
@@ -248,7 +249,7 @@ def parse_markdown_to_tree(md_content, file_name=""):
                 "children": []
             }
 
-            # 根据标题级别决定插入位置
+            # Insert at correct position based on heading level
             if level == 1:
                 nodes.append(node)
             elif level == 2 and nodes:
@@ -265,18 +266,18 @@ def parse_markdown_to_tree(md_content, file_name=""):
 
         i += 1
 
-    # 如果没有任何节点（纯文本），按固定行数分块
+    # If no nodes found (plain text), chunk by fixed line count
     if not nodes:
         nodes = _chunk_by_lines(lines, lines_per_chunk=100)
 
     root = {
         "id": "root",
-        "title": file_name or "文档",
+        "title": file_name or "Document",
         "type": "root",
         "children": nodes
     }
 
-    # AI 分类：调用 LLM 识别文档类型（失败时静默忽略）
+    # AI classification: call LLM to identify document type (silently ignored on failure)
     classification = classify_document_with_llm(md_content, file_name)
     if classification:
         root["doc_type"] = classification["doc_type"]
@@ -289,7 +290,7 @@ def parse_markdown_to_tree(md_content, file_name=""):
 def _empty_tree(file_name):
     return {
         "id": "root",
-        "title": file_name or "文档",
+        "title": file_name or "Document",
         "type": "root",
         "children": []
     }
@@ -297,11 +298,11 @@ def _empty_tree(file_name):
 
 def _make_summary(text, max_len=150):
     """
-    生成内容摘要：取前 max_len 个有意义的字符
+    Generate content summary: take first max_len meaningful characters.
     """
     if not text:
         return ""
-    # 去掉多余空白
+    # Collapse whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     if len(text) <= max_len:
         return text
@@ -310,10 +311,10 @@ def _make_summary(text, max_len=150):
 
 def _guess_page_range(all_lines, heading_line_idx):
     """
-    根据标题附近是否出现 "第 N 页" 来推断页码范围
+    Infer page range from "Page N" markers near the heading.
     """
     context = '\n'.join(all_lines[max(0, heading_line_idx - 5):heading_line_idx + 20])
-    pages = re.findall(r'第\s*(\d+)\s*页', context)
+    pages = re.findall(r'Page\s*(\d+)', context)
     if pages:
         return f"{pages[0]}-{pages[-1]}"
     return ""
@@ -321,7 +322,7 @@ def _guess_page_range(all_lines, heading_line_idx):
 
 def _find_last_with_children(nodes):
     """
-    从后往前找有 children 的节点
+    Find the last node that has children (search backwards).
     """
     for i in range(len(nodes) - 1, -1, -1):
         if nodes[i].get("children"):
@@ -331,7 +332,7 @@ def _find_last_with_children(nodes):
 
 def _chunk_by_lines(lines, lines_per_chunk=100):
     """
-    纯文本没有结构时，按固定行数分块
+    Chunk plain text without structure by fixed line count.
     """
     chunks = []
     total = len(lines)
@@ -342,7 +343,7 @@ def _chunk_by_lines(lines, lines_per_chunk=100):
         page_num = _find_page_num(chunk_lines)
         chunks.append({
             "id": f"chunk_{start // lines_per_chunk + 1}",
-            "title": f"第 {start // lines_per_chunk + 1} 节" if page_num is None else f"第 {page_num} 页",
+            "title": f"Section {start // lines_per_chunk + 1}" if page_num is None else f"Page {page_num}",
             "type": "chunk",
             "page_start": page_num or (start // lines_per_chunk + 1),
             "page_end": page_num or (end // lines_per_chunk + 1),
@@ -355,9 +356,9 @@ def _chunk_by_lines(lines, lines_per_chunk=100):
 
 
 def _find_page_num(chunk_lines):
-    """从块中找到第一个页码"""
+    """Find the first page number in a chunk."""
     for line in chunk_lines:
-        m = re.match(r'^##\s*第\s*(\d+)\s*页', line.strip())
+        m = re.match(r'^##\s*Page\s*(\d+)', line.strip())
         if m:
             return int(m.group(1))
     return None

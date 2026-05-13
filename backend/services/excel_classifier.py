@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Excel 大纲 + LLM 智能分类服务
-功能：
-1. 读取项目根目录下的 Excel 大纲文件（.xlsx），自动识别分类结构
-2. 把 Markdown 内容按段落切块（约 500-800 字/块）
-3. 调用 LLM 把每块内容映射到 Excel 分类
-4. 组装成结构化 JSON 树
+Excel Outline + LLM Smart Classification Service
+Features:
+1. Read Excel outline file (.xlsx) from project root, auto-detect classification structure
+2. Chunk Markdown content into paragraphs (~500-800 chars/chunk)
+3. Call LLM to map each chunk to Excel categories
+4. Assemble into structured JSON tree
 """
 import re
 import json
@@ -16,22 +16,22 @@ from config_manager import get_config, is_llm_enabled
 
 
 # ============================================================
-# 1. 读取 Excel 大纲
+# 1. Load Excel Outline
 # ============================================================
 
 def load_excel_outline(excel_path=None):
     """
-    读取 Excel 文件，返回大纲结构（用于给 LLM 分类）
-    返回 dict: { outline_text: str, categories: list[dict] }
-    categories 里每个元素: { code, name, keywords, level }
+    Read Excel file, return outline structure (for LLM classification).
+    Returns dict: { outline_text: str, categories: list[dict] }
+    Each category element: { code, name, keywords, level }
 
-    excel_path 为 None 时，自动扫描项目根目录下的 .xlsx 文件作为大纲。
-    找不到任何 .xlsx 时返回 None（调用方应优雅降级，不报错）。
+    When excel_path is None, auto-scan project root for .xlsx files as outline.
+    If no .xlsx found, returns None (caller should gracefully degrade, not error).
     """
     if excel_path is None:
-        # 从 backend/services/excel_classifier.py，往上三层到 vip/
+        # From backend/services/excel_classifier.py, go up 3 levels to vip/
         _vip_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        # 自动扫描项目根目录下的 .xlsx 文件（排除 ~$ 开头的临时文件）
+        # Auto-scan project root for .xlsx files (exclude ~$ temp files)
         candidates = []
         try:
             candidates = [
@@ -41,11 +41,11 @@ def load_excel_outline(excel_path=None):
         except Exception:
             pass
         if candidates:
-            # 优先选最近修改过的
+            # Prefer most recently modified
             candidates.sort(key=lambda f: os.path.getmtime(os.path.join(_vip_dir, f)), reverse=True)
             excel_path = os.path.join(_vip_dir, candidates[0])
         else:
-            return None  # 没有 xlsx 文件时优雅降级，不报错
+            return None  # No xlsx files — graceful degradation, no error
 
     if not os.path.exists(excel_path):
         return None
@@ -57,16 +57,16 @@ def load_excel_outline(excel_path=None):
 
         rows = list(ws.iter_rows(values_only=True))
 
-        # 第一行是标题
+        # First row is header
         categories = []
-        for row in rows[2:]:  # 跳过标题行（第1、2行）
+        for row in rows[2:]:  # skip header rows (row 1, 2)
             if not row or not any(cell for cell in row):
                 continue
             level = row[0]  # L1 / L2
-            code = row[1]   # L1, L1.1 等
-            name = row[2]   # 节点名称
-            parent = row[3]  # 父节点
-            keywords = row[4] if len(row) > 4 else ""  # 关键词
+            code = row[1]   # L1, L1.1 etc.
+            name = row[2]   # node name
+            parent = row[3]  # parent node
+            keywords = row[4] if len(row) > 4 else ""  # keywords
 
             if not code or not name:
                 continue
@@ -79,7 +79,7 @@ def load_excel_outline(excel_path=None):
                 "keywords": str(keywords or "").strip()
             })
 
-        # 构建层级树（L1 是根分类，L2 是子分类）
+        # Build hierarchy: L1 = root category, L2 = subcategory
         l1_list = [c for c in categories if c["level"] == "L1"]
         l2_map = {}
         for c in categories:
@@ -89,13 +89,13 @@ def load_excel_outline(excel_path=None):
                     l2_map[parent_code] = []
                 l2_map[parent_code].append(c)
 
-        # 生成供 LLM 阅读的分类文本（精简版，只保留 code+name，减小 prompt 体积）
+        # Generate classification text for LLM (compact: code+name only, reduces prompt size)
         outline_lines = []
         for l1 in l1_list:
-            outline_lines.append(f"【{l1['code']}】{l1['name']}")
+            outline_lines.append(f"[{l1['code']}] {l1['name']}")
             children = l2_map.get(l1["code"], [])
             for l2 in children:
-                outline_lines.append(f"  - 【{l2['code']}】{l2['name']}")
+                outline_lines.append(f"  - [{l2['code']}] {l2['name']}")
 
         outline_text = "\n".join(outline_lines)
         return {
@@ -106,38 +106,38 @@ def load_excel_outline(excel_path=None):
         }
 
     except Exception as e:
-        print(f"[excel_classifier] 读取 Excel 失败: {e}")
+        print(f"[excel_classifier] Failed to read Excel: {e}")
         return None
 
 
 # ============================================================
-# 2. 切块（粗暴按段落切，约 600 字一块）
+# 2. Chunking (paragraph-based, ~600 chars per chunk)
 # ============================================================
 
 def chunk_markdown(md_content, chunk_size=600, overlap=50):
     """
-    把 Markdown 内容切成若干块。
-    - 优先按自然段落切（两个换行之间）
-    - 每块约 chunk_size 个中文字符
-    - 返回 list[dict]: { chunk_id, content, char_count }
+    Split Markdown content into chunks.
+    - Prefers natural paragraph boundaries (double newlines)
+    - Each chunk approx. chunk_size characters
+    - Returns list[dict]: { chunk_id, content, char_count }
     """
     if not md_content:
         return []
 
-    # 先把 Markdown 里的多余空行合并
+    # Collapse excess blank lines
     md_content = re.sub(r'\n{3,}', '\n\n', md_content)
-    # 去掉页眉页脚干扰词
+    # Remove header/footer junk patterns
     junk_patterns = [
-        r'加微信[^\n]*',
-        r'请关注[^\n]*',
-        r'扫码[^\n]*',
-        r'版权声明[^\n]*',
+        r'Add WeChat[^\n]*',
+        r'Follow us[^\n]*',
+        r'Scan QR[^\n]*',
+        r'Copyright[^\n]*',
         r'http\S+',
     ]
     for pat in junk_patterns:
         md_content = re.sub(pat, '', md_content)
 
-    # 按段落分割
+    # Split by paragraph boundaries
     paragraphs = re.split(r'\n\n+', md_content)
     chunks = []
     current = []
@@ -149,10 +149,10 @@ def chunk_markdown(md_content, chunk_size=600, overlap=50):
         if not para:
             continue
         para_len = len(para)
-        # 如果单段落超长，继续拆
+        # If single paragraph is extra long, split further
         if para_len > chunk_size * 1.5:
-            # 把超长段落拆成句子
-            sentences = re.split(r'(?<=[。！？；\n])', para)
+            # Split long paragraph into sentences
+            sentences = re.split(r'(?<=[.?!;\n])', para)
             for sent in sentences:
                 sent = sent.strip()
                 if not sent:
@@ -164,7 +164,7 @@ def chunk_markdown(md_content, chunk_size=600, overlap=50):
                         "char_count": current_len
                     })
                     chunk_id += 1
-                    # overlap：保留最后一句作为下一块开头
+                    # overlap: keep last sentence as next chunk start
                     if overlap > 0 and current:
                         overlap_text = current[-1][-overlap:]
                         current = [overlap_text]
@@ -195,7 +195,7 @@ def chunk_markdown(md_content, chunk_size=600, overlap=50):
             current.append(para)
             current_len += para_len
 
-    # 最后一块
+    # Final chunk
     if current:
         chunks.append({
             "chunk_id": f"chunk_{chunk_id}",
@@ -207,11 +207,11 @@ def chunk_markdown(md_content, chunk_size=600, overlap=50):
 
 
 # ============================================================
-# 3. LLM 分类（批量调用，避免多次请求）
+# 3. LLM Classification (batch calls to reduce requests)
 # ============================================================
 
 def _get_llm_url(config):
-    """构造 LLM 接口 URL"""
+    """Build LLM API endpoint URL."""
     api_base = config.get("api_base", "https://api.minimax.chat/v1").rstrip("/")
     if any(x in api_base for x in ["/chat/completions"]):
         return api_base
@@ -222,24 +222,24 @@ def _get_llm_url(config):
 
 def _classify_single_chunk(chunk_text, outline_text, config):
     """
-    把单个 chunk 发给 LLM，返回分类结果。
-    返回: { l1_code, l1_name, l2_code, l2_name, reason, discard }
-    如果 LLM 不可用或出错，返回 None
+    Send a single chunk to LLM, return classification result.
+    Returns: { l1_code, l1_name, l2_code, l2_name, reason, discard }
+    Returns None if LLM unavailable or error.
     """
-    prompt = f"""你是知识库分类助手。请判断以下文本片段属于哪个分类。
+    prompt = f"""You are a knowledge base classification assistant. Determine which category the following text fragment belongs to.
 
-【分类大纲】：
+[Classification Outline]:
 {outline_text}
 
-【文本片段】：
+[Text Fragment]:
 ---
 {chunk_text[:800]}
 ---
 
-用 JSON 返回（不要其他文字）：
-{{"l1_code":"L1编号","l1_name":"L1名称","l2_code":"L2编号","l2_name":"L2名称","reason":"一句话理由","discard":false,"confidence":0.85}}
+Return JSON only (no other text):
+{{"l1_code":"L1 code","l1_name":"L1 name","l2_code":"L2 code","l2_name":"L2 name","reason":"one-line reason","discard":false,"confidence":0.85}}
 
-注意：广告/版权/空白内容 discard=true，confidence<0.4 时 discard=true"""
+Note: ads/copyright/blank content should have discard=true. If confidence<0.4, set discard=true."""
 
     import time
     max_retries = 3
@@ -250,7 +250,7 @@ def _classify_single_chunk(chunk_text, outline_text, config):
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 200,
-                "thinking": {"type": "disabled"}  # 关闭思维链
+                "thinking": {"type": "disabled"}  # disable chain-of-thought
             }
 
             req = urllib.request.Request(
@@ -268,42 +268,42 @@ def _classify_single_chunk(chunk_text, outline_text, config):
                 choices = result.get("choices", [])
                 if choices:
                     raw = choices[0].get("message", {}).get("content", "").strip()
-                    # 去除 <think>...</think> 思考块
+                    # Remove <think>...</think> blocks
                     raw = re.sub(r'<think>[\s\S]*?</think>', '', raw).strip()
                     m = re.search(r'\{[\s\S]*\}', raw)
                     if m:
                         return json.loads(m.group())
         except Exception as e:
-            print(f"[excel_classifier] LLM 调用失败 (第{attempt+1}次): {e}")
+            print(f"[excel_classifier] LLM call failed (attempt {attempt+1}): {e}")
             if attempt < max_retries - 1:
-                wait = 3 * (2 ** attempt)  # 3s → 6s
-                print(f"  → {wait}秒后重试...")
+                wait = 3 * (2 ** attempt)  # 3s -> 6s
+                print(f"  -> retrying in {wait}s...")
                 time.sleep(wait)
     return None
 
 
 def _classify_batch_chunks(batch_chunks, outline_text, config):
     """
-    一次 LLM 调用处理多个 chunk（批量模式），减少 API 请求次数。
-    返回: list[dict|None] 与 batch_chunks 等长
+    Process multiple chunks in a single LLM call (batch mode), reducing API requests.
+    Returns: list[dict|None] same length as batch_chunks
     """
     import time
     items_text = ""
     for idx, chunk in enumerate(batch_chunks):
         items_text += f"\n[{idx+1}] {chunk['content'][:400]}\n"
 
-    prompt = f"""你是知识库分类助手。请对以下 {len(batch_chunks)} 个文本片段逐一分类。
+    prompt = f"""You are a knowledge base classification assistant. Classify each of the following {len(batch_chunks)} text fragments.
 
-【分类大纲】：
+[Classification Outline]:
 {outline_text}
 
-【文本片段】：
+[Text Fragments]:
 {items_text}
 
-请用 JSON 数组返回，每项对应一个片段（顺序不变，不要其他文字）：
-[{{"l1_code":"L1编号","l1_name":"L1名称","l2_code":"L2编号","l2_name":"L2名称","reason":"理由","discard":false,"confidence":0.85}}, ...]
+Return a JSON array only, one entry per fragment (same order, no other text):
+[{{"l1_code":"L1 code","l1_name":"L1 name","l2_code":"L2 code","l2_name":"L2 name","reason":"reason","discard":false,"confidence":0.85}}, ...]
 
-注意：广告/版权/空白内容 discard=true"""
+Note: ads/copyright/blank content should have discard=true."""
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -312,8 +312,8 @@ def _classify_batch_chunks(batch_chunks, outline_text, config):
                 "model": config.get("model", "MiniMax-M2.7"),
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
-                "max_tokens": max(4000, 800 * len(batch_chunks)),  # 每块留足 800 token（含 think 块）
-                "thinking": {"type": "disabled"}  # 关闭思维链
+                "max_tokens": max(4000, 800 * len(batch_chunks)),  # 800 tokens per chunk (including think block)
+                "thinking": {"type": "disabled"}  # disable chain-of-thought
             }
             req = urllib.request.Request(
                 _get_llm_url(config),
@@ -329,7 +329,7 @@ def _classify_batch_chunks(batch_chunks, outline_text, config):
                 choices = result.get("choices", [])
                 if choices:
                     raw = choices[0].get("message", {}).get("content", "").strip()
-                    # 去除 <think>...</think> 思考块（MiniMax 模型会输出）
+                    # Remove <think>...</think> blocks (MiniMax model output)
                     raw = re.sub(r'<think>[\s\S]*?</think>', '', raw).strip()
                     m = re.search(r'\[[\s\S]*\]', raw)
                     if m:
@@ -337,21 +337,21 @@ def _classify_batch_chunks(batch_chunks, outline_text, config):
                         if isinstance(arr, list) and len(arr) == len(batch_chunks):
                             return arr
         except Exception as e:
-            print(f"[excel_classifier] 批量LLM失败 (第{attempt+1}次): {e}")
+            print(f"[excel_classifier] Batch LLM failed (attempt {attempt+1}): {e}")
             if attempt < max_retries - 1:
                 wait = 3 * (2 ** attempt)
-                print(f"  → {wait}秒后重试...")
+                print(f"  -> retrying in {wait}s...")
                 time.sleep(wait)
-    # 批量失败，回退到逐个调用
-    print("[excel_classifier] 批量调用失败，回退逐个处理")
+    # Batch failed, fallback to single-item calls
+    print("[excel_classifier] Batch call failed, falling back to single-item processing")
     return [_classify_single_chunk(c["content"], outline_text, config) for c in batch_chunks]
 
 
 def _classify_chunks_batch(chunks, outline_text, progress_callback=None):
     """
-    批量分类 chunks，每 5 块一次 LLM 调用。
-    超大文件自动截断到 200 块。
-    返回: list[dict] 附加了 l1_code, l2_code 等字段的 chunks
+    Batch classify chunks, 5 chunks per LLM call.
+    Large files auto-truncated to 200 chunks.
+    Returns: list[dict] chunks with l1_code, l2_code etc. fields appended.
     """
     import time
 
@@ -360,11 +360,11 @@ def _classify_chunks_batch(chunks, outline_text, progress_callback=None):
 
     config = get_config()
     if not config.get("api_key"):
-        print("[excel_classifier] LLM API Key 未配置，无法分类")
+        print("[excel_classifier] LLM API Key not configured, cannot classify")
         return []
 
     if len(chunks) > MAX_CHUNKS:
-        print(f"[excel_classifier] 文件过大，仅处理前 {MAX_CHUNKS} 块（共 {len(chunks)} 块）")
+        print(f"[excel_classifier] File too large, processing first {MAX_CHUNKS} chunks only (total {len(chunks)})")
         chunks = chunks[:MAX_CHUNKS]
 
     results = []
@@ -373,28 +373,28 @@ def _classify_chunks_batch(chunks, outline_text, progress_callback=None):
     while i < total:
         batch = chunks[i:i + BATCH_SIZE]
         if progress_callback:
-            progress_callback(i, total, f"LLM 分类中 {i+1}-{min(i+BATCH_SIZE, total)}/{total}...")
-        print(f"[excel_classifier] 处理第 {i+1}-{min(i+BATCH_SIZE, total)}/{total} 块...")
+            progress_callback(i, total, f"LLM classifying {i+1}-{min(i+BATCH_SIZE, total)}/{total}...")
+        print(f"[excel_classifier] Processing chunks {i+1}-{min(i+BATCH_SIZE, total)}/{total}...")
 
         t0 = time.time()
         classifications = _classify_batch_chunks(batch, outline_text, config)
-        print(f"[excel_classifier] 批次完成，耗时 {round(time.time()-t0, 1)}s")
+        print(f"[excel_classifier] Batch complete in {round(time.time()-t0, 1)}s")
 
         for j, chunk in enumerate(batch):
             cls = classifications[j] if classifications and j < len(classifications) else None
             if cls:
-                # 删除 LLM 可能多返回的 content/title 字段，防止覆盖原始切块内容
+                # Remove any extra content/title fields LLM might return, prevent overwriting original chunk content
                 cls.pop("content", None)
                 cls.pop("title", None)
                 chunk.update(cls)
             else:
-                # LLM 未响应时归入大纲的第一个分类（通用兜底，不写死特定行业）
+                # LLM unresponsive: assign to first outline category (generic fallback, not industry-specific)
                 chunk.update({
                     "l1_code": "L1",
-                    "l1_name": "未分类",
+                    "l1_name": "Unclassified",
                     "l2_code": "L1.1",
-                    "l2_name": "未分类内容",
-                    "reason": "LLM 未响应，归入默认分类",
+                    "l2_name": "Unclassified Content",
+                    "reason": "LLM unresponsive, assigned to default category",
                     "discard": False,
                     "confidence": 0.1
                 })
@@ -402,36 +402,36 @@ def _classify_chunks_batch(chunks, outline_text, progress_callback=None):
 
         i += BATCH_SIZE
         if i < total:
-            time.sleep(0.3)  # 批次间短暂停顿
+            time.sleep(0.3)  # brief pause between batches
 
     return results
 
 
 # ============================================================
-# 4. 组装成 Excel 结构的 JSON 树
+# 4. Assemble into Excel-structured JSON Tree
 # ============================================================
 
 def _classify_whole_doc(md_content, outline_text, original_name, config):
     """
-    小文件整体分类：把整篇文档发给 LLM，一次返回分类结果。
-    适用于 < 8000 字的文件，避免分块串行调用。
-    返回: (tree, stats)
+    Whole-document classification: send entire document to LLM, get classification in one call.
+    Suitable for files < 8000 chars, avoids per-chunk sequential calls.
+    Returns: (tree, stats)
     """
     import time
-    prompt = f"""你是知识库分类助手。请分析以下文档，判断其内容属于哪个分类，并把文档切分成若干段落分别归类。
+    prompt = f"""You are a knowledge base classification assistant. Analyze the following document, determine which category it belongs to, and segment it into paragraphs for individual classification.
 
-【分类大纲】：
+[Classification Outline]:
 {outline_text}
 
-【文档内容】：
+[Document Content]:
 ---
 {md_content[:6000]}
 ---
 
-请用 JSON 数组返回，每个元素代表文档的一个主要段落/章节，格式如下（不要其他文字）：
-[{{"title":"段落标题","content":"段落核心内容（50字内）","l1_code":"L1编号","l1_name":"L1名称","l2_code":"L2编号","l2_name":"L2名称","reason":"一句话理由","discard":false,"confidence":0.9}}, ...]
+Return a JSON array, each element representing a major paragraph/section of the document, in this format (no other text):
+[{{"title":"section title","content":"core content (50 chars max)","l1_code":"L1 code","l1_name":"L1 name","l2_code":"L2 code","l2_name":"L2 name","reason":"one-line reason","discard":false,"confidence":0.9}}, ...]
 
-注意：返回 3-8 个元素即可，覆盖文档主要内容。"""
+Note: return 3-8 elements, covering the document's main content."""
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -441,7 +441,7 @@ def _classify_whole_doc(md_content, outline_text, original_name, config):
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.3,
                 "max_tokens": 4000,
-                "thinking": {"type": "disabled"}  # 关闭思维链，加快响应速度
+                "thinking": {"type": "disabled"}  # disable chain-of-thought for faster response
             }
             req = urllib.request.Request(
                 _get_llm_url(config),
@@ -462,7 +462,7 @@ def _classify_whole_doc(md_content, outline_text, original_name, config):
                     if m:
                         arr = json.loads(m.group())
                         if isinstance(arr, list) and len(arr) > 0:
-                            # 转成 chunks 格式
+                            # Convert to chunks format
                             chunks = []
                             for i, item in enumerate(arr):
                                 chunks.append({
@@ -485,11 +485,11 @@ def _classify_whole_doc(md_content, outline_text, original_name, config):
                             }
                             for c in chunks:
                                 if not c.get("discard"):
-                                    key = c.get("l2_name", "未知")
+                                    key = c.get("l2_name", "Unknown")
                                     stats["by_category"][key] = stats["by_category"].get(key, 0) + 1
                             return tree, stats
         except Exception as e:
-            print(f"[excel_classifier] 整体分类失败 (第{attempt+1}次): {e}")
+            print(f"[excel_classifier] Whole-doc classification failed (attempt {attempt+1}): {e}")
             if attempt < max_retries - 1:
                 time.sleep(3)
     return None, None
@@ -497,10 +497,10 @@ def _classify_whole_doc(md_content, outline_text, original_name, config):
 
 def build_excel_tree(classified_chunks, original_name=""):
     """
-    把 LLM 分类好的 chunks，按 Excel 的 L1/L2 结构组装成树。
-    返回树形 JSON（格式与现有 tree_parser 一致）
+    Assemble LLM-classified chunks into a tree matching the Excel L1/L2 structure.
+    Returns tree JSON (format consistent with existing tree_parser).
     """
-    # 按 Excel 分类汇总
+    # Group by Excel classification
     # key: (l1_code, l2_code), value: list[chunk]
     category_chunks = {}
     for chunk in classified_chunks:
@@ -511,15 +511,15 @@ def build_excel_tree(classified_chunks, original_name=""):
             category_chunks[key] = []
         category_chunks[key].append(chunk)
 
-    # L1 节点映射
+    # L1 name mapping
     l1_names = {}
     for chunk in classified_chunks:
         l1_names[chunk.get("l1_code", "L1")] = chunk.get("l1_name", "")
 
-    # 构建树
+    # Build tree
     children = []
     for (l1_code, l2_code), chunks in sorted(category_chunks.items()):
-        # 找或创建 L1 节点
+        # Find or create L1 node
         l1_node = next((c for c in children if c["id"] == l1_code), None)
         if l1_node is None:
             l1_node = {
@@ -534,12 +534,12 @@ def build_excel_tree(classified_chunks, original_name=""):
             }
             children.append(l1_node)
 
-        # 合并该 L2 下所有 chunks 的内容
+        # Merge all chunk content under this L2
         combined_content = "\n\n".join(c["content"] for c in chunks)
-        # 取第一个 chunk 的 l2 信息
+        # Take L2 info from first chunk
         first = chunks[0]
 
-        # 构建 L2 节点
+        # Build L2 node
         l2_node = {
             "id": f"{l1_code}_{l2_code}",
             "title": first.get("l2_name", l2_code),
@@ -547,13 +547,13 @@ def build_excel_tree(classified_chunks, original_name=""):
             "level": 2,
             "page_range": "",
             "summary": _make_summary(combined_content, 150),
-            "content_preview": combined_content,  # L2 节点保留全部合并内容
+            "content_preview": combined_content,  # L2 node keeps full merged content
             "children": [
                 {
                     "id": c.get("chunk_id", f"leaf_{i}"),
-                    "title": _extract_title(c["content"]),  # 从内容提取标题
+                    "title": _extract_title(c["content"]),  # extract title from content
                     "type": "chunk",
-                    "content_preview": c["content"],  # 完整原文，不截断
+                    "content_preview": c["content"],  # full original text, no truncation
                     "summary": _make_summary(c["content"], 100),
                     "confidence": c.get("confidence", 0),
                     "reason": c.get("reason", ""),
@@ -566,14 +566,14 @@ def build_excel_tree(classified_chunks, original_name=""):
 
     return {
         "id": "root",
-        "title": original_name or "文档",
+        "title": original_name or "Document",
         "type": "root",
         "children": children
     }
 
 
 def _make_summary(text, max_len=150):
-    """生成摘要"""
+    """Generate summary."""
     if not text:
         return ""
     text = re.sub(r'\s+', ' ', text).strip()
@@ -583,66 +583,66 @@ def _make_summary(text, max_len=150):
 
 
 def _extract_title(content, max_len=40):
-    """从段落内容中提取标题（优先取第一个 Markdown 标题行，否则取前40字）"""
+    """Extract title from paragraph content (prefer first Markdown heading, otherwise first 40 chars)."""
     if not content:
-        return "段落"
+        return "Paragraph"
     for line in content.splitlines():
         line = line.strip()
         if line.startswith('#'):
             title = re.sub(r'^#+\s*', '', line).strip()
             if title:
                 return title[:max_len]
-    # 无标题行，取首行非空文字
+    # No heading line, use first non-empty line
     for line in content.splitlines():
         line = line.strip()
         if line:
             return line[:max_len]
-    return "段落"
+    return "Paragraph"
 
 
 # ============================================================
-# 5. 完整流程：Excel 大纲 + LLM 分类
+# 5. Complete Flow: Excel Outline + LLM Classification
 # ============================================================
 
 def excel_classify_and_build(md_content, original_name="", excel_path=None,
                              progress_callback=None):
     """
-    完整流程：
-    1. 读取 Excel 大纲
-    2. 把 Markdown 切块（保留原文，不丢任何内容）
-    3. LLM 只贴分类标签（不改原文内容）
-    4. 按 Excel 结构组装树
+    Complete flow:
+    1. Read Excel outline
+    2. Chunk Markdown (preserve original text, no content loss)
+    3. LLM applies classification labels only (does not modify original content)
+    4. Assemble tree by Excel structure
 
-    返回: (tree_json, stats_dict)
+    Returns: (tree_json, stats_dict)
     stats: { total_chunks, discarded, by_category }
     """
-    # Step 1: 读 Excel
+    # Step 1: Read Excel
     if progress_callback:
-        progress_callback(0, 100, "读取 Excel 大纲...")
+        progress_callback(0, 100, "Reading Excel outline...")
     outline = load_excel_outline(excel_path)
     if not outline:
-        excel_name = os.path.basename(excel_path) if excel_path else "大纲文件"
-        raise Exception(f"无法读取 Excel 大纲文件（{excel_name}），请确认文件格式正确且位于项目根目录")
+        excel_name = os.path.basename(excel_path) if excel_path else "outline file"
+        raise Exception(f"Cannot read Excel outline file ({excel_name}), please verify the file format is correct and located in project root")
 
-    # Step 2: 切块（保留原文全部内容）
+    # Step 2: Chunk (preserve all original content)
     if progress_callback:
-        progress_callback(15, 100, "切分内容段落...")
+        progress_callback(15, 100, "Chunking content...")
     chunks = chunk_markdown(md_content)
     if not chunks:
-        raise Exception("Markdown 内容为空，无法分类")
+        raise Exception("Markdown content is empty, cannot classify")
 
-    # Step 3: LLM 只贴分类标签（不修改 chunk 原文）
+    # Step 3: LLM applies classification labels (does not modify chunk content)
     total_chunks = len(chunks)
     if progress_callback:
-        progress_callback(20, 100, f"开始 AI 分类（共 {total_chunks} 块）...")
+        progress_callback(20, 100, f"Starting AI classification ({total_chunks} chunks)...")
     classified = _classify_chunks_batch(chunks, outline["outline_text"], progress_callback)
 
-    # Step 4: 组装树
+    # Step 4: Assemble tree
     if progress_callback:
-        progress_callback(95, 100, "正在生成分类树结构...")
+        progress_callback(95, 100, "Building classification tree...")
     tree = build_excel_tree(classified, original_name)
 
-    # 统计
+    # Stats
     stats = {
         "total_chunks": len(classified),
         "discarded": sum(1 for c in classified if c.get("discard")),
@@ -651,10 +651,10 @@ def excel_classify_and_build(md_content, original_name="", excel_path=None,
     for c in classified:
         if c.get("discard"):
             continue
-        key = c.get("l2_name", "未知")
+        key = c.get("l2_name", "Unknown")
         stats["by_category"][key] = stats["by_category"].get(key, 0) + 1
 
     if progress_callback:
-        progress_callback(100, 100, "分类完成！")
+        progress_callback(100, 100, "Classification complete!")
 
     return tree, stats

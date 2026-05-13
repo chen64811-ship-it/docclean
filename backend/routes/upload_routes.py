@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-上传和文件管理路由
+Upload and File Management Routes
 """
 import os
 import uuid
@@ -15,22 +15,20 @@ from services.tree_parser import parse_markdown_to_tree
 from progress_store import set_progress, get_progress, del_progress, get_all_progress
 import threading
 
-# 创建蓝图
 upload_bp = Blueprint("upload", __name__)
 
 
 def process_file_background(file_id, stored_name, original_name, file_ext):
     """
-    后台线程处理文件：提取文字（保留格式） -> 清洗 -> 导出 Markdown
+    Background worker thread: extract text (preserve formatting) -> clean -> export Markdown
     """
     import time as _time
 
-    # 记录开始时间，用于超时检测
     start_time = _time.time()
-    MAX_PROCESS_TIME = 600  # 超过 10 分钟视为超时
+    MAX_PROCESS_TIME = 600  # timeout after 10 minutes
 
     def _check_timeout():
-        """检测是否超时，超时则抛异常"""
+        """Check for timeout and raise if exceeded"""
         if _time.time() - start_time > MAX_PROCESS_TIME:
             raise Exception(f"Timeout (exceeded {MAX_PROCESS_TIME}s). File may be too large or complex.")
 
@@ -42,11 +40,11 @@ def process_file_background(file_id, stored_name, original_name, file_ext):
         if not os.path.exists(file_path):
             raise Exception(f"File not found: {file_path}")
 
-        # 图片保存目录：outputs/uuid/（用于docx里的图片）
+        # Image save directory: outputs/uuid/ (for images embedded in docx)
         docx_img_dir = os.path.join(OUTPUT_FOLDER, os.path.splitext(stored_name)[0])
         os.makedirs(docx_img_dir, exist_ok=True)
 
-        # 提取内容（传入 file_id 用于进度上报）
+        # Extract content (pass file_id for progress reporting)
         _check_timeout()
         raw_text = extract_text(file_path, file_ext, file_id=file_id)
 
@@ -59,7 +57,7 @@ def process_file_background(file_id, stored_name, original_name, file_ext):
         set_progress(file_id, 100, 85, "Generating Markdown...")
         markdown_content = text_to_markdown(cleaned_text, title=title)
 
-        # 保存 Markdown
+        # Save Markdown
         set_progress(file_id, 100, 95, "Saving file...")
         md_basename = os.path.splitext(stored_name)[0] + ".md"
         output_path = os.path.abspath(os.path.join(OUTPUT_FOLDER, md_basename))
@@ -67,7 +65,7 @@ def process_file_background(file_id, stored_name, original_name, file_ext):
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(markdown_content)
 
-        # ✨ 生成树结构 JSON（无缝插入：Markdown 生成之后）
+        # Generate tree structure JSON (inserted seamlessly after Markdown generation)
         set_progress(file_id, 100, 98, "Generating tree structure...")
         import json
         tree_data = parse_markdown_to_tree(markdown_content, original_name)
@@ -147,10 +145,10 @@ def upload_file():
         original_name = file.filename
         filename = secure_filename(original_name)
 
-        # 如果 secure_filename 把文件名清空了（中文或特殊字符），从原始文件名手动提取扩展名
-        # 然后生成一个安全的文件名
+        # If secure_filename emptied the name (Chinese or special chars), extract extension manually
+        # and generate a safe filename
         if not filename or "." not in filename:
-            # 手动从原始名提取扩展名
+            # Manually extract extension from original name
             if "." in original_name:
                 ext = original_name.rsplit(".", 1)[-1].lower().strip()
                 safe_ext = "".join(c for c in ext if c.isalnum())
@@ -158,7 +156,7 @@ def upload_file():
                 safe_ext = ""
             filename = f"file_{uuid.uuid4().hex[:8]}.{safe_ext}" if safe_ext else f"file_{uuid.uuid4().hex[:8]}"
 
-        # 检查文件格式（基于安全文件名）
+        # Validate file format (based on safe filename)
         if not is_allowed_file(filename):
             results.append({
                 "success": False,
@@ -167,15 +165,15 @@ def upload_file():
             })
             continue
 
-        # 生成唯一存储文件名
+        # Generate unique storage filename
         file_ext = get_file_ext(filename)
         stored_name = f"{uuid.uuid4().hex}.{file_ext}"
         file_path = os.path.join(UPLOAD_FOLDER, stored_name)
 
-        # 保存文件
+        # Save file
         file.save(file_path)
 
-        # 确认文件确实保存了
+        # Verify file was actually saved
         if not os.path.exists(file_path):
             results.append({
                 "success": False,
@@ -184,13 +182,13 @@ def upload_file():
             })
             continue
 
-        # 获取文件大小
+        # Get file size
         file_size = os.path.getsize(file_path)
 
-        # 写入数据库（去重逻辑在 add_file 内部）
+        # Write to database (dedup logic is in add_file)
         file_id = add_file(original_name, stored_name, file_size, file_ext)
 
-        # 如果 file_id 为 None，说明是重复文件，直接跳过
+        # If file_id is None, it's a duplicate — skip
         if file_id is None:
             results.append({
                 "success": True,
@@ -200,7 +198,7 @@ def upload_file():
             })
             continue
 
-        # 启动后台处理线程
+        # Start background processing thread
         thread = threading.Thread(
             target=process_file_background,
             args=(file_id, stored_name, original_name, file_ext)
@@ -215,7 +213,7 @@ def upload_file():
             "message": "Uploaded, parsing started"
         })
 
-    # 返回所有文件的上传结果
+    # Return all upload results
     success_count = sum(1 for r in results if r.get("success"))
     return jsonify({
         "success": True,
@@ -293,7 +291,7 @@ def download_file(file_id):
         return jsonify({"success": False, "message": f"File status is {file_info['status']}, cannot download"}), 400
 
     output_path = file_info["output_path"]
-    # 规范化路径（处理 ../ 等相对路径）
+    # Normalize path (resolve ../ etc.)
     output_path = os.path.abspath(output_path) if output_path else ""
     if not output_path or not os.path.exists(output_path):
         return jsonify({"success": False, "message": "File has been deleted"}), 404
@@ -355,7 +353,7 @@ def delete_files():
 @upload_bp.route("/api/download/all", methods=["GET"])
 def download_all():
     """
-    下载所有已完成的 Markdown 文件（打包成zip）
+    Download all completed Markdown files (packaged as zip).
     """
     import zipfile
     from io import BytesIO
@@ -389,8 +387,8 @@ def download_all():
 @upload_bp.route("/api/download/batch", methods=["POST"])
 def download_batch():
     """
-    批量下载选中的已完成文件（打包成zip）
-    请求体：{"file_ids": [1, 2, 3]}
+    Batch download selected completed files (packaged as zip).
+    Request body: {"file_ids": [1, 2, 3]}
     """
     import zipfile
     from io import BytesIO
@@ -467,11 +465,11 @@ def export_pdf(file_id):
         if not os.path.exists(output_path):
             return jsonify({"success": False, "message": "Markdown file has been deleted"}), 404
 
-        # 读取 Markdown 文本
+        # Read Markdown text
         with open(output_path, "r", encoding="utf-8") as f:
             md_text = f.read()
 
-        # 调用 pdf_service 生成 PDF 字节流
+        # Generate PDF byte stream via pdf_service
         pdf_bytes = markdown_to_pdf(md_text, title=file_info.get("original_name", ""))
 
         pdf_name = os.path.splitext(file_info["original_name"])[0] + ".pdf"
@@ -513,7 +511,6 @@ def get_parse_progress():
                 type: integer
     """
     import time
-    # 获取所有文件状态
     files = get_all_files()
     parsing_ids = [f["id"] for f in files if f["status"] == "parsing"]
 
@@ -523,7 +520,7 @@ def get_parse_progress():
         if p:
             progress_data[str(fid)] = p
         else:
-            # 有进度但 store 里没有（刚开始），返回默认
+            # In parsing state but no progress entry yet (just started), return default
             progress_data[str(fid)] = {"total": 100, "done": 0, "stage": "Preparing...", "pct": 0}
 
     return jsonify({"success": True, "progress": progress_data, "parsing_ids": parsing_ids})
@@ -644,7 +641,7 @@ def save_file_content(file_id):
 @upload_bp.route("/api/tree/<int:file_id>", methods=["GET"])
 def get_tree(file_id):
     """
-    获取指定文件的章节树结构 JSON
+    Get chapter tree structure JSON for a specific file.
     """
     file_info = get_file_by_id(file_id)
 
@@ -652,7 +649,7 @@ def get_tree(file_id):
         return jsonify({"success": False, "message": "File not found"}), 404
 
     if file_info["status"] != "done":
-        return jsonify({"success": False, "message": "文件还未解析完成"}), 400
+        return jsonify({"success": False, "message": "File not yet parsed"}), 400
 
     tree_path = file_info.get("tree_path", "")
     if not tree_path:
@@ -679,19 +676,19 @@ def get_tree(file_id):
 @upload_bp.route("/api/upload-file/<path:filename>", methods=["GET"])
 def serve_upload_file(filename):
     """
-    提供原始上传文件的访问（供 PDF.js 等前端组件加载文件）
+    Serve raw uploaded file (for PDF.js and other frontend components to load files).
     """
-    # filename 就是 stored_name（如 uuid.pdf）
+    # filename is the stored_name (e.g. uuid.pdf)
     file_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, filename))
 
-    # 安全检查：确保文件在 uploads 目录内
+    # Security check: ensure file is within uploads directory
     if not file_path.startswith(os.path.abspath(UPLOAD_FOLDER)):
         return jsonify({"success": False, "message": "Invalid path"}), 403
 
     if not os.path.exists(file_path):
         return jsonify({"success": False, "message": "File not found"}), 404
 
-    # 根据扩展名返回正确的 MIME 类型
+    # Return correct MIME type by extension
     ext = os.path.splitext(filename)[1].lower()
     mime_types = {
         ".pdf": "application/pdf",

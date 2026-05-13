@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DocClean - Document Cleaning & Markdown Export</title>
 <link rel="icon" href="data:image/x-icon;base64,AA">
-<link rel="preconnect" href="https://fonts.googleapis.cn">
-<link href="https://fonts.googleapis.cn/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.bootcdn.net/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/turndown@7.1.3/dist/turndown.min.js"></script>
-<script src="https://cdn.bootcdn.net/ajax/libs/simplemde-editor/1.11.2/easymde.min.js"></script>
-<link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/simplemde-editor/1.11.2/easymde.min.css">
+<script src="https://cdn.jsdelivr.net/npm/easymde@1.11.2/dist/easymde.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@1.11.2/dist/easymde.min.css">
 <style>
 /* ============================================================
    DocClean — Modern SaaS UI
@@ -625,9 +625,86 @@ body {
     .main { flex-direction: column; }
     .content-area { height: 60%; }
 }
+
+/* ============================================================
+   Login Overlay
+   ============================================================ */
+.login-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(15,23,42,0.6); backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+}
+.login-overlay.hidden { display: none; }
+.login-box {
+    background: var(--surface); border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg); padding: 40px; width: 400px; max-width: 90vw;
+    animation: modalIn 0.3s ease;
+}
+.login-box h2 { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.login-box .login-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; }
+.login-box .field { margin-bottom: 16px; }
+.login-box .field label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.login-box .field input {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius);
+    font-size: 14px; font-family: inherit; outline: none; transition: border 0.2s;
+}
+.login-box .field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-border); }
+.login-box .login-error { font-size: 12px; color: var(--danger); margin-bottom: 12px; display: none; }
+.login-box .login-error.show { display: block; }
+.login-box .btn-login {
+    width: 100%; padding: 11px; background: var(--primary); color: #fff; border: none;
+    border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: background 0.2s;
+}
+.login-box .btn-login:hover { background: var(--primary-light); }
+.login-box .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* User Menu */
+.user-menu-btn {
+    position: relative; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+    border-radius: var(--radius); font-size: 13px; font-weight: 600;
+    color: var(--text-secondary); background: var(--surface);
+    border: 1px solid var(--border); transition: all 0.15s;
+}
+.user-menu-btn:hover { background: var(--surface-hover); }
+.user-menu-btn .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+.user-menu-dropdown {
+    position: absolute; top: 100%; right: 0; margin-top: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); min-width: 160px; z-index: 9999; display: none;
+    animation: modalIn 0.15s ease;
+}
+.user-menu-dropdown.show { display: block; }
+.user-menu-dropdown .menu-item {
+    padding: 10px 14px; font-size: 13px; color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; gap: 8px; transition: background 0.1s;
+}
+.user-menu-dropdown .menu-item:hover { background: var(--surface-hover); }
+.user-menu-dropdown .menu-item:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+.user-menu-dropdown .menu-item:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+.user-menu-dropdown .menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
 </style>
 </head>
 <body>
+
+<!-- Login Overlay -->
+<div class="login-overlay hidden" id="loginOverlay">
+    <div class="login-box">
+        <h2>Welcome to DocClean</h2>
+        <p class="login-sub">Sign in to access your documents</p>
+        <div class="field">
+            <label>Username</label>
+            <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username">
+        </div>
+        <div class="field">
+            <label>Password</label>
+            <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <div class="login-error" id="loginError">Invalid username or password</div>
+        <button class="btn-login" id="btnLogin" onclick="doLogin()">Sign In</button>
+    </div>
+</div>
 
 <!-- 顶栏 -->
 <div class="header">
@@ -641,6 +718,14 @@ body {
         </div>
     </div>
     <div class="header-right">
+        <div class="user-menu-btn" id="userMenuBtn" onclick="toggleUserMenu()" style="display:none">
+            <div class="avatar" id="userAvatar">U</div>
+            <span id="userNameDisplay">User</span>
+            <span style="font-size:10px">▾</span>
+            <div class="user-menu-dropdown" id="userMenuDropdown">
+                <div class="menu-item" onclick="event.stopPropagation(); doLogout()">🚪 Sign Out</div>
+            </div>
+        </div>
         <div class="view-switcher" id="viewSwitcher">
             <button class="view-btn" id="btnKnowledge" onclick="switchView('knowledge')">📚 KB</button>
             <button class="view-btn active" id="btnPdfMd" onclick="switchView('pdfmd')">📄 PDF+MD</button>
@@ -959,7 +1044,7 @@ body {
 
 <script>
 // 设置 PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.bootcdn.net/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
 // ================================================================
 // 全局变量
@@ -988,7 +1073,7 @@ var kbState = { docs: [], currentDocId: null, currentTree: null, selectedNode: n
 // ================================================================
 function $(id) { return document.getElementById(id); }
 function fmtSize(b) { if (!b) return '0 B'; if (b < 1024) return b + ' B'; if (b < 1048576) return (b / 1024).toFixed(1) + ' KB'; return (b / 1048576).toFixed(1) + ' MB'; }
-function fmtTime(ts) { if (!ts || isNaN(ts)) return 'Unknown'; return new Date(ts * 1000).toLocaleDateString('zh-CN'); }
+function fmtTime(ts) { if (!ts || isNaN(ts)) return 'Unknown'; return new Date(ts * 1000).toLocaleDateString('en-US'); }
 function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 // ================================================================
@@ -1015,12 +1100,144 @@ function toast(msg, type) {
 // ================================================================
 var API = (window.location.origin || (window.location.protocol + '//' + window.location.host)) + '/api';
 
+// ================================================================
+// Auth-aware fetch wrapper (sends session cookie)
+// ================================================================
+function apiFetch(url, opts) {
+    opts = opts || {};
+    opts.credentials = 'include';
+    return fetch(url, opts);
+}
+
+// ================================================================
+// Auth: Login / Logout / Session check
+// ================================================================
+function checkAuth() {
+    return apiFetch(API + '/auth-check', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.authenticated) {
+                hideLoginOverlay();
+                if (data.auth_enabled && data.user) {
+                    showUserMenu(data.user);
+                }
+            } else {
+                showLoginOverlay();
+            }
+        })
+        .catch(function() {
+            showLoginOverlay();
+        });
+}
+
+function showLoginOverlay() {
+    $('loginOverlay').classList.remove('hidden');
+    setTimeout(function() { $('loginUser').focus(); }, 100);
+}
+
+function hideLoginOverlay() {
+    $('loginOverlay').classList.add('hidden');
+    $('loginError').classList.remove('show');
+}
+
+function showUserMenu(username) {
+    $('userMenuBtn').style.display = 'flex';
+    $('userNameDisplay').textContent = username;
+    $('userAvatar').textContent = (username || 'U').charAt(0).toUpperCase();
+}
+
+function hideUserMenu() {
+    $('userMenuBtn').style.display = 'none';
+}
+
+function toggleUserMenu() {
+    $('userMenuDropdown').classList.toggle('show');
+}
+
+function doLogin() {
+    var username = $('loginUser').value.trim();
+    var password = $('loginPass').value.trim();
+    if (!username || !password) {
+        $('loginError').textContent = 'Please enter username and password';
+        $('loginError').classList.add('show');
+        return;
+    }
+    var btn = $('btnLogin');
+    btn.disabled = true;
+    btn.textContent = 'Signing in...';
+    $('loginError').classList.remove('show');
+
+    apiFetch(API + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: username, password: password })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            hideLoginOverlay();
+            showUserMenu(data.user);
+            refreshList();
+            loadKbDocList();
+            loadBookList();
+        } else {
+            $('loginError').textContent = data.message || 'Login failed';
+            $('loginError').classList.add('show');
+        }
+    })
+    .catch(function() {
+        $('loginError').textContent = 'Network error. Please try again.';
+        $('loginError').classList.add('show');
+    })
+    .finally(function() {
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+    });
+}
+
+function doLogout() {
+    apiFetch(API + '/logout', { method: 'POST', credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function() {
+            hideUserMenu();
+            showLoginOverlay();
+            fileListData = [];
+            renderFileList();
+            currentFileId = null;
+            currentMdContent = '';
+            $('docWrap').style.display = 'none';
+            $('emptyState').style.display = 'flex';
+            $('userMenuDropdown').classList.remove('show');
+        })
+        .catch(function() {
+            showLoginOverlay();
+        });
+}
+
+// Enter key submits login form
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !$('loginOverlay').classList.contains('hidden')) {
+        doLogin();
+    }
+});
+
+// Click outside closes user menu
+document.addEventListener('click', function(e) {
+    var menu = $('userMenuDropdown');
+    var btn = $('userMenuBtn');
+    if (menu && menu.classList.contains('show') && !btn.contains(e.target)) {
+        menu.classList.remove('show');
+    }
+});
+
 function apiUpload(file, onProgress) {
     return new Promise(function(resolve, reject) {
         var xhr = new XMLHttpRequest();
         var form = new FormData();
         form.append('file', file);
         xhr.open('POST', API + '/upload');
+        xhr.withCredentials = true;
         xhr.upload.onprogress = function(e) { if (e.lengthComputable && onProgress) onProgress(Math.round(e.loaded / e.total * 100)); };
         xhr.onload = function() { if (xhr.status === 200) resolve(JSON.parse(xhr.responseText)); else reject(new Error(xhr.responseText)); };
         xhr.onerror = function() { reject(new Error('Network error')); };
@@ -1028,36 +1245,36 @@ function apiUpload(file, onProgress) {
     });
 }
 
-function apiList() { return fetch(API + '/files').then(function(r) { return r.json(); }); }
-function apiContent(id) { return fetch(API + '/file-content/' + id).then(function(r) { return r.json(); }); }
+function apiList() { return apiFetch(API + '/files').then(function(r) { return r.json(); }); }
+function apiContent(id) { return apiFetch(API + '/file-content/' + id).then(function(r) { return r.json(); }); }
 function apiSave(id, content) {
-    return fetch(API + '/file-content/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: content }) }).then(function(r) { return r.json(); });
+    return apiFetch(API + '/file-content/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: content }) }).then(function(r) { return r.json(); });
 }
 function apiDelete(ids) {
-    return fetch(API + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_ids: ids }) }).then(function(r) { return r.json(); });
+    return apiFetch(API + '/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_ids: ids }) }).then(function(r) { return r.json(); });
 }
 
 // KB API
-function apiKbList() { return fetch(API + '/kb/list').then(function(r) { return r.json(); }); }
-function apiKbTree(fileId) { return fetch(API + '/kb/tree/' + fileId).then(function(r) { return r.json(); }); }
+function apiKbList() { return apiFetch(API + '/kb/list').then(function(r) { return r.json(); }); }
+function apiKbTree(fileId) { return apiFetch(API + '/kb/tree/' + fileId).then(function(r) { return r.json(); }); }
 function apiKbSearch(query, fileId) {
     var url = API + '/kb/search?q=' + encodeURIComponent(query);
     if (fileId) url += '&file_id=' + fileId;
     return fetch(url).then(function(r) { return r.json(); });
 }
 function apiKbAsk(query, fileId) {
-    return fetch(API + '/kb/ask', {
+    return apiFetch(API + '/kb/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query, file_id: fileId || null, top_k: 5 })
     }).then(function(r) { return r.json(); });
 }
-function apiKbConfig() { return fetch(API + '/kb/config').then(function(r) { return r.json(); }); }
+function apiKbConfig() { return apiFetch(API + '/kb/config').then(function(r) { return r.json(); }); }
 function apiKbSaveConfig(cfg) {
-    return fetch(API + '/kb/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
+    return apiFetch(API + '/kb/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
 }
 function apiKbTestLlm(cfg) {
-    return fetch(API + '/kb/test-llm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
+    return apiFetch(API + '/kb/test-llm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) }).then(function(r) { return r.json(); });
 }
 
 // ================================================================
@@ -1647,7 +1864,7 @@ function batchExport() {
     document.body.appendChild(form);
     // 改用fetch下载
     document.body.removeChild(form);
-    fetch(API + '/download/batch', {
+    apiFetch(API + '/download/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_ids: doneIds })
@@ -1732,7 +1949,7 @@ function doClassifyExcel() {
     updateClassifyBanner(0, 'Starting...');
     startClassifyFake(0);
 
-    fetch(API + '/kb/classify-excel/' + currentFileId, { method: 'POST' })
+    apiFetch(API + '/kb/classify-excel/' + currentFileId, { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.success) {
@@ -1756,7 +1973,7 @@ function doClassifyExcel() {
 
 function pollClassifyStatus() {
     if (!currentFileId) return;
-    fetch(API + '/kb/classify-status/' + currentFileId)
+    apiFetch(API + '/kb/classify-status/' + currentFileId)
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (!data.success) {
@@ -2279,7 +2496,7 @@ function openCompileBookModal() {
     $('bookDetectInfo').textContent = 'Detecting outline file...';
     $('btnStartCompile').disabled = true;
 
-    fetch(API + '/list-docx').then(function(r){ return r.json(); }).then(function(data) {
+    apiFetch(API + '/list-docx').then(function(r){ return r.json(); }).then(function(data) {
         if (!data.success || !data.files.length) {
             $('bookDetectInfo').innerHTML = '⚠️ No .docx outline found. Please place a Word outline file in the <b>vip/</b> root directory.';
             return;
@@ -2329,7 +2546,7 @@ function startCompileBook() {
     $('bookCompileStatus').textContent = 'Analyzing outline and matching content, please wait...';
     $('bookCompileStatus').style.color = '#667eea';
 
-    fetch(API + '/compile-book', {
+    apiFetch(API + '/compile-book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docx_path: _compileDocxPath || null })
@@ -2575,7 +2792,7 @@ function openBookView() {
  * 加载书籍列表 (填充下拉选项）
  */
 function loadBookList() {
-    fetch(API + '/list-books').then(function(r){ return r.json(); }).then(function(data) {
+    apiFetch(API + '/list-books').then(function(r){ return r.json(); }).then(function(data) {
         _bookListLoaded = true;
         if (!data.success || !data.books || !data.books.length) {
             $('bookSelect').style.display = 'none';
@@ -2644,7 +2861,7 @@ function loadBookContentLight(filename, size) {
     $('bookBlockCount').textContent = 'Light Preview';
     $('bookPage').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">Loading book content...</div></div>';
 
-    fetch(API + '/download-book/' + encodeURIComponent(filename))
+    apiFetch(API + '/download-book/' + encodeURIComponent(filename))
     .then(function(r){ if (!r.ok) throw new Error('Load failed'); return r.text(); })
     .then(function(text) {
         _bookDirty = false;
@@ -2660,7 +2877,7 @@ function loadBookContentBlock(filename) {
     $('bookBlockCount').textContent = 'Loading...';
     $('bookPage').innerHTML = '<div class="loading-wrap" style="background:transparent"><div class="loading-ring"></div><div class="loading-msg">Loading book content...</div></div>';
 
-    fetch(API + '/book-content/' + encodeURIComponent(filename))
+    apiFetch(API + '/book-content/' + encodeURIComponent(filename))
     .then(function(r){ return r.json(); })
     .then(function(data) {
         if (!data.success) {
@@ -2930,7 +3147,7 @@ function saveBookBlocks() {
     btn.disabled = true;
     btn.textContent = '⏳ Saving...';
 
-    fetch(API + '/book-content/' + encodeURIComponent(_currentBookFilename), {
+    apiFetch(API + '/book-content/' + encodeURIComponent(_currentBookFilename), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: md })
@@ -2975,6 +3192,7 @@ function downloadCurrentBook() {
 // ================================================================
 // 启动
 // ================================================================
+checkAuth();  // Check session auth before loading data
 initSplitLayout();
 setupUpload();
 refreshList();
@@ -2993,7 +3211,7 @@ switchView('pdfmd');
 function exportBackendPDF() {
     if (!currentFileId) { toast('Please open a file first', 'err'); return; }
     toast('Generating PDF, please wait...', 'info');
-    fetch(API + '/export-pdf/' + currentFileId)
+    apiFetch(API + '/export-pdf/' + currentFileId)
         .then(function(resp) {
             if (!resp.ok) return resp.json().then(function(d) { throw new Error(d.message || 'Generation failed'); });
             // 从响应头取文件名

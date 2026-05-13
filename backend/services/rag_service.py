@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-RAG 搜索服务
-功能：
-1. 分块存储：将 Markdown 内容按章节/页分块
-2. 检索：TF-IDF 风格关键词匹配 + 语义排序
-3. LLM 问答：调用配置的 LLM API 生成答案
+RAG Search Service
+Features:
+1. Chunk storage: split Markdown content by chapter/page
+2. Retrieval: TF-IDF style keyword matching + semantic ranking
+3. LLM Q&A: call configured LLM API to generate answers
 """
 import re
 import math
@@ -12,29 +12,29 @@ from collections import Counter
 from config_manager import get_config, is_llm_enabled
 
 
-# ========== LLM URL 构造 ==========
+# ========== LLM URL Construction ==========
 
 def get_llm_url(config):
     """
-    根据配置的 api_base 智能构造完整接口 URL
+    Intelligently construct the full API endpoint URL from the configured api_base.
     """
     api_base = config.get("api_base", "https://api.minimax.chat/v1").rstrip("/")
-    # 如果已经是完整路径
+    # If already a complete path
     if any(x in api_base for x in ["/chat/completions"]):
         return api_base
-    # 如果 api_base 尾部是 /v1（MiniMax 格式），追加 /chat/completions
+    # If api_base ends with /v1 (MiniMax format), append /chat/completions
     if api_base.endswith("/v1"):
         return api_base + "/chat/completions"
-    # 否则拼接默认 OpenAI 兼容格式
+    # Otherwise append default OpenAI-compatible path
     return api_base + "/v1/chat/completions"
 
 
-# ========== 分块存储 ==========
+# ========== Content Chunking ==========
 
 def chunk_content(md_content, file_id, file_name="", chunk_size=200):
     """
-    将 Markdown 内容分块，每块约 chunk_size 行
-    返回块列表，每个块含 id/file_id/title/content/keywords
+    Split Markdown content into chunks, approximately chunk_size lines each.
+    Returns list of chunk objects with id/file_id/title/content/keywords.
     """
     if not md_content:
         return []
@@ -43,21 +43,21 @@ def chunk_content(md_content, file_id, file_name="", chunk_size=200):
     total_lines = len(lines)
     chunks = []
 
-    # 策略1：按 ## 第 N 页 分块（PDF格式）
-    page_blocks = re.split(r'(?=^##\s*第\s*\d+\s*页)', md_content, flags=re.MULTILINE)
+    # Strategy 1: split by "## Page N" headers (PDF format)
+    page_blocks = re.split(r'(?=^##\s*Page\s*\d+)', md_content, flags=re.MULTILINE)
     if len(page_blocks) > 1 and len(page_blocks) < 50:
         for block in page_blocks:
             block = block.strip()
             if not block:
                 continue
-            # 提取页码
-            pm = re.match(r'^##\s*第\s*(\d+)\s*页', block)
+            # Extract page number
+            pm = re.match(r'^##\s*Page\s*(\d+)', block)
             page_num = int(pm.group(1)) if pm else 0
-            title = f"第 {page_num} 页" if page_num else "内容"
+            title = f"Page {page_num}" if page_num else "Content"
             chunks.append(_make_chunk(file_id, file_name, title, page_num, page_num, block))
         return chunks
 
-    # 策略2：按 ## 标题 分块（Markdown格式）
+    # Strategy 2: split by ## headings (Markdown format)
     heading_blocks = re.split(r'(?=^##\s+)', md_content, flags=re.MULTILINE)
     if len(heading_blocks) > 1 and len(heading_blocks) < 30:
         for block in heading_blocks:
@@ -65,12 +65,12 @@ def chunk_content(md_content, file_id, file_name="", chunk_size=200):
             if not block:
                 continue
             hm = re.match(r'^##\s+(.+)', block)
-            title = hm.group(1).strip() if hm else "内容"
+            title = hm.group(1).strip() if hm else "Content"
             page_num = _extract_page_num(block)
             chunks.append(_make_chunk(file_id, file_name, title, page_num, page_num, block))
         return chunks
 
-    # 策略3：按固定行数分块
+    # Strategy 3: fixed-size chunking by line count
     for i in range(0, total_lines, chunk_size):
         end = min(i + chunk_size, total_lines)
         block_lines = lines[i:end]
@@ -78,7 +78,7 @@ def chunk_content(md_content, file_id, file_name="", chunk_size=200):
         if not block.strip():
             continue
         first_line = block_lines[0].strip()
-        title = re.sub(r'^#+\s*', '', first_line) if first_line.startswith('#') else f"第 {i // chunk_size + 1} 节"
+        title = re.sub(r'^#+\s*', '', first_line) if first_line.startswith('#') else f"Section {i // chunk_size + 1}"
         page_num = _extract_page_num(block)
         chunks.append(_make_chunk(file_id, file_name, title, page_num, page_num, block))
 
@@ -86,7 +86,7 @@ def chunk_content(md_content, file_id, file_name="", chunk_size=200):
 
 
 def _make_chunk(file_id, file_name, title, page_start, page_end, content):
-    """构建一个块对象"""
+    """Build a chunk object."""
     keywords = _extract_keywords(content)
     return {
         "id": f"{file_id}_chunk_{page_start}",
@@ -102,45 +102,45 @@ def _make_chunk(file_id, file_name, title, page_start, page_end, content):
 
 
 def _extract_page_num(text):
-    """从文本中提取第一个页码"""
-    m = re.search(r'第\s*(\d+)\s*页', text)
+    """Extract the first page number from text."""
+    m = re.search(r'Page\s*(\d+)', text)
     return int(m.group(1)) if m else 0
 
 
 def _extract_keywords(text, top_n=20):
-    """提取关键词：高频实词"""
-    text = re.sub(r'[^\w\u4e00-\u9fff]', ' ', text)  # 只保留文字和数字
+    """Extract keywords: high-frequency content words."""
+    text = re.sub(r'[^\w\u4e00-\u9fff]', ' ', text)  # keep only letters and digits
     words = text.split()
-    # 过滤停用词和太短/太长的词
+    # Filter stop words and words that are too short or too long
     stop_words = {'的', '了', '是', '在', '和', '与', '对', '为', '有', '我', '这', '那', '也', '就', '都', '而', '及', '其', '被', '以', '将', '可', '中', '于', '上', '下', '或', '但', 'not', 'the', 'and', 'of', 'to', 'in', 'is', 'for', 'on', 'with', 'as', 'by'}
     filtered = [w for w in words if len(w) >= 2 and w not in stop_words and not w.isdigit()]
     counter = Counter(filtered)
     return [w for w, _ in counter.most_common(top_n)]
 
 
-# ========== 向量检索（TF-IDF 风格）==========
+# ========== Vector Retrieval (TF-IDF style) ==========
 
 def compute_tfidf_score(chunk_keywords, query_keywords):
     """
-    计算块与查询的 TF-IDF 风格相似度得分
-    chunk_keywords: list[str]  块的关键词
-    query_keywords: list[str]  查询的关键词
-    返回: float 得分
+    Compute TF-IDF style similarity score between chunk and query.
+    chunk_keywords: list[str]  chunk keywords
+    query_keywords: list[str]  query keywords
+    Returns: float score
     """
     if not chunk_keywords or not query_keywords:
         return 0.0
     chunk_set = set(chunk_keywords)
     query_set = set(query_keywords)
 
-    # 1. 精确匹配
+    # 1. Exact match
     intersection = chunk_set & query_set
     exact_score = len(intersection)
 
-    # 2. 包含匹配（查询词是否包含在块关键词中，或块关键词是否包含查询词）
+    # 2. Substring match (query word contained in chunk keyword, or vice versa)
     contain_score = 0
     for qk in query_set:
         for ck in chunk_set:
-            # 查询词包含在块关键词中
+            # Query word contained in chunk keyword
             if qk in ck or ck in qk:
                 contain_score += 0.5
                 break
@@ -151,18 +151,18 @@ def compute_tfidf_score(chunk_keywords, query_keywords):
 
 def search_chunks(chunks, query, top_k=5):
     """
-    在块列表中搜索最相关的 top_k 个块
-    chunks: list[dict]  所有块
-    query: str  用户查询
-    返回: list[dict]  相关块，按得分降序
+    Search chunks for the top_k most relevant matches.
+    chunks: list[dict]  all chunks
+    query: str  user query
+    Returns: list[dict]  relevant chunks sorted by score descending
     """
     if not chunks or not query:
         return []
 
-    # 提取查询关键词
+    # Extract query keywords
     query_keywords = _extract_keywords(query, top_n=15)
     if not query_keywords:
-        # 如果关键词提取失败，用查询字符串本身
+        # If keyword extraction fails, use the raw query split
         query_keywords = [w for w in query.split() if len(w) >= 2]
 
     scored = []
@@ -170,14 +170,14 @@ def search_chunks(chunks, query, top_k=5):
         chunk_keywords = chunk.get("keywords", [])
         score = compute_tfidf_score(chunk_keywords, query_keywords)
 
-        # 额外加分：查询词出现在标题中
+        # Bonus: query word appears in title
         title = chunk.get("title", "")
         for kw in query_keywords:
             if kw in title:
                 score += 0.3
                 break
 
-        # 额外加分：查询词出现在内容中
+        # Bonus: query appears in content
         content = chunk.get("content", "")
         content_lower = content.lower()
         query_lower = query.lower()
@@ -195,13 +195,13 @@ def search_chunks(chunks, query, top_k=5):
     return scored[:top_k]
 
 
-# ========== LLM 问答 ==========
+# ========== LLM Q&A ==========
 
 def generate_answer(query, context_chunks):
     """
-    调用配置的 LLM API，基于上下文块生成答案
-    context_chunks: list[dict]  检索到的相关块
-    返回: str  LLM 生成的答案
+    Call the configured LLM API to generate an answer based on context chunks.
+    context_chunks: list[dict]  retrieved relevant chunks
+    Returns: str  LLM-generated answer
     """
     if not is_llm_enabled():
         return None
@@ -209,30 +209,29 @@ def generate_answer(query, context_chunks):
     if not context_chunks:
         return "No relevant content found. Try different query terms."
 
-    # 构建上下文
+    # Build context
     context_parts = []
     for i, chunk in enumerate(context_chunks, 1):
         page_info = f"(Page {chunk['page_start']})" if chunk['page_start'] else ""
-        context_parts.append(f"【来源{i}】{chunk['title']}{page_info}:\n{chunk['content_preview']}\n")
+        context_parts.append(f"[Source {i}] {chunk['title']}{page_info}:\n{chunk['content_preview']}\n")
 
     context_text = "\n\n".join(context_parts)
 
-    prompt = f"""你现在是一位资深的、懂得变通的商业咨询顾问。请仔细阅读以下参考资料，用专业、有启发性且接地气的口吻回答用户的提问。
+    prompt = f"""You are an experienced business consultant who is knowledgeable, adaptable, and approachable. Read the reference materials below carefully, then answer the user's question with professional insight and practical advice.
 
-核心要求：
-1. 不要像机器一样生硬地罗列“来源1、来源2”，也不要因为资料里没有直接的答案就说“不知道”。
-2. 请深度思考用户问题背后的真实需求，提取参考资料中有用的商业底层逻辑（比如消费趋势、用户视角、销售机制等），将它们融会贯通，给用户提供实用的建议。
-3. 如果资料内容与问题确实有一定关联，请尽力运用资料中的知识来解答；如果资料真的和问题八竿子打不着，你可以基于常识回答，但要礼貌地提一句“参考资料中未过多涉及，但基于经验我的建议是...”。
+Core requirements:
+1. Don't mechanically list "Source 1, Source 2" like a robot. Don't say "I don't know" just because the materials don't have a direct answer.
+2. Think deeply about the real need behind the user's question. Extract useful business principles from the materials (such as consumer trends, user perspectives, sales mechanisms, etc.) and synthesize them to provide practical recommendations.
+3. If the materials are relevant to the question, do your best to use that knowledge in your answer. If the materials truly have no connection to the question, you may answer based on general knowledge, but politely mention that "the reference materials don't cover this in depth, but based on my experience..."
 
 ---
-【参考资料】:
+[Reference Materials]:
 {context_text}
 ---
 
-【用户的提问】：{query}
+[User's Question]: {query}
 
-请以顾问的口吻，用中文给出你的详细回答："""
-
+Please respond in the language the user asked in, with a detailed, consultant-style answer:"""
 
     config = get_config()
     try:
@@ -272,8 +271,8 @@ def generate_answer(query, context_chunks):
 
 def test_llm_connection():
     """
-    测试 LLM 连接是否正常
-    返回: (success: bool, message: str)
+    Test LLM connection health.
+    Returns: (success: bool, message: str)
     """
     config = get_config()
     api_key = config.get("api_key", "").strip()
@@ -286,8 +285,6 @@ def test_llm_connection():
 
         llm_url = get_llm_url(config)
 
-        # MiniMax 特殊处理：需要 GroupId（从 API Key 中提取或用默认）
-        # MiniMax API Key 格式: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... 或 sk-cp-xxx 格式
         headers = {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + api_key
@@ -295,7 +292,7 @@ def test_llm_connection():
 
         payload = {
             "model": config.get("model", "MiniMax-M2.7"),
-            "messages": [{"role": "user", "content": "说 hello"}],
+            "messages": [{"role": "user", "content": "Say hello"}],
             "max_tokens": 10
         }
 

@@ -1,23 +1,23 @@
 # ============================================================
-# DocClean Docker 镜像（GPU 版本）
-# 适用场景：有 NVIDIA 显卡，需要 GPU 加速 OCR
+# DocClean Docker Image (GPU version)
+# Use case: machines with NVIDIA GPU for accelerated OCR
 #
-# 前置条件（宿主机需安装）：
-#   1. NVIDIA 显卡驱动（版本 >= 525）
+# Prerequisites (host machine):
+#   1. NVIDIA GPU driver (version >= 525)
 #   2. nvidia-container-toolkit
 #      https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 #
-# 启动命令：docker-compose --profile gpu up -d
+# Start: docker-compose --profile gpu up -d
 # ============================================================
 
 FROM nvidia/cuda:11.8-cudnn8-runtime-ubuntu22.04
 
-# 设置环境变量
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive
 
-# 安装 Python 3.10 + 系统依赖
+# Install Python 3.10 + system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 \
     python3.10-dev \
@@ -33,27 +33,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3.10 /usr/bin/python \
     && ln -sf /usr/bin/python3.10 /usr/bin/python3
 
-# 设置工作目录
+# Set working directory
 WORKDIR /app
 
-# 先复制依赖文件（利用 Docker 缓存）
+# Copy dependency file first (leverage Docker layer caching)
 COPY backend/requirements.txt /app/requirements.txt
 
-# 安装 Python 依赖
-# requirements.txt 里的 paddlepaddle-gpu 是 Windows/CUDA 12 版本
-# Docker 用 CUDA 11.8 基础镜像，需要替换为对应的 post118 版本
+# Install Python dependencies
+# requirements.txt has paddlepaddle-gpu for Windows/CUDA 12
+# Docker uses CUDA 11.8 base image, must replace with post118 version
 RUN sed -i '/paddlepaddle-gpu/d' /app/requirements.txt && \
     pip install --no-cache-dir paddlepaddle-gpu==2.6.2.post118 && \
     pip install --no-cache-dir -r /app/requirements.txt
 
-# 复制整个项目
+# Copy entire project
 COPY . /app/
 
-# 创建必要的目录
+# Create required directories
 RUN mkdir -p /app/uploads /app/outputs
 
-# 暴露端口
+# Expose port
 EXPOSE 5000
 
-# 启动命令
+# Start command
 CMD ["python", "backend/app.py"]

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-文档内容提取服务
-支持 PDF、Word（docx）、Excel（xlsx）、Markdown、图片（OCR）
-Word 格式：保留标题层级、加粗、斜体、列表、图片
+Document Content Extraction Service
+Supports PDF, Word (docx), Excel (xlsx), Markdown, Images (OCR)
+Word format preserves heading levels, bold, italic, lists, images
 
-优化：
-1. GPU 加速：OCR 使用线程池 + GPU 并行处理
-2. 智能判断：原生 PDF 直接提取文字，扫描件才走 OCR
+Optimizations:
+1. GPU acceleration: OCR uses thread pool + GPU parallel processing
+2. Smart detection: native PDFs extract text directly, scanned pages use OCR
 """
 import os
 import traceback
@@ -18,24 +18,24 @@ from threading import Lock
 from config import OUTPUT_FOLDER
 
 
-# ========== PDF 提取（多进程 + PyMuPDF主力提取 + OCR备选）==========
+# ========== PDF Extraction (multiprocess + PyMuPDF primary + OCR fallback) ==========
 
 def _is_garbage_text(text):
     """
-    判断提取的文字是否为乱码/垃圾内容（语言无关，中英文均适用）
+    Check if extracted text is garbled/garbage (language-agnostic, applies to both CJK and Latin).
 
-    核心思路：
-    - 统计有意义的文字字符（中文 + 拉丁字母 + 数字）
-    - 有意义字符占比太低 → 乱码
-    - 有意义字符总数太少 → 无有效内容，需 OCR
-    - 不再依赖"中文字符比例"来判断，纯英文不会误判为乱码
+    Core logic:
+    - Count meaningful characters (CJK + Latin letters + digits)
+    - If meaningful character ratio is too low → garbage
+    - If total meaningful characters too few → insufficient content, needs OCR
+    - No longer relies on "Chinese character ratio" — pure English won't be misjudged as garbage
 
-    返回 True 表示需要走 OCR
+    Returns True if OCR fallback is needed.
     """
     if not text or len(text.strip()) < 5:
         return True
 
-    # 统计各类有意义字符
+    # Count meaningful character categories
     cjk_chars = len(re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', text))
     latin_chars = len(re.findall(r'[a-zA-Z]', text))
     digit_chars = len(re.findall(r'[0-9]', text))
@@ -45,25 +45,25 @@ def _is_garbage_text(text):
     if total_chars == 0:
         return True
 
-    # 有意义字符占比（中 + 英 + 数字 都算有意义）
+    # Meaningful character ratio (CJK + Latin + digits all count as meaningful)
     meaningful_ratio = meaningful / total_chars
 
-    # 有意义字符占比低于 25% → 乱码（标点/符号太多）
+    # Meaningful ratio below 25% → garbage (too many symbols/punctuation)
     if meaningful_ratio < 0.25:
         return True
 
-    # 有意义字符总数太少 → 内容不足，需要 OCR
+    # Too few meaningful characters → insufficient content, needs OCR
     if meaningful < 15:
         return True
 
-    # 英文文档：拉丁字符占主导，不需要中文来验证
-    # 只要有意义字符比例足够，就不判为垃圾
+    # English document: Latin characters dominate, no CJK validation needed
+    # As long as meaningful ratio is sufficient, not garbage
     if latin_chars > 0 and cjk_chars == 0:
-        # 纯英文文档：拉丁字符 >= 40% 就是正常内容
+        # Pure English: Latin >= 30% is valid content
         if latin_chars / total_chars >= 0.30:
             return False
 
-    # 中英混合或纯中文：有意义字符足够就不判为垃圾
+    # Mixed CJK/English or pure CJK: sufficient meaningful chars → valid
     if meaningful >= 20:
         return False
 
@@ -72,8 +72,8 @@ def _is_garbage_text(text):
 
 def _extract_pdfminer_page(file_path, page_num):
     """
-    用 pdfminer.six 提取单页文字（对中文 CID 字体支持更好）
-    使用 PDFPageExtractor 避免每次都重新解析整篇 PDF
+    Extract a single page using pdfminer.six (better CJK CID font support).
+    Uses PDFPageExtractor to avoid re-parsing the entire PDF each time.
     """
     try:
         from pdfminer.high_level import extract_pages
@@ -96,8 +96,8 @@ def _extract_pdfminer_page(file_path, page_num):
 
 def _extract_pdfminer_full(file_path):
     """
-    用 pdfminer.six 一次性提取整篇 PDF 文字
-    对中文 CID 字体支持最好
+    Extract full PDF text using pdfminer.six in a single pass.
+    Best support for CJK CID fonts.
     """
     try:
         from pdfminer.high_level import extract_text
@@ -111,13 +111,13 @@ def _extract_pdfminer_full(file_path):
 
 def _extract_text_from_page_fitz(page):
     """
-    用 PyMuPDF 提取单个页面文字，尝试多种模式取最完整结果
+    Extract text from a single PyMuPDF page, trying multiple modes for best result.
     """
     text = page.get_text("text")
     if text and len(text.strip()) > 10 and not _is_garbage_text(text):
         return text.strip()
 
-    # blocks 模式（更完整，包含表格等）
+    # blocks mode (more complete, includes tables etc.)
     blocks_text = page.get_text("blocks")
     if blocks_text:
         lines = []
@@ -129,7 +129,7 @@ def _extract_text_from_page_fitz(page):
             if not _is_garbage_text(combined) and len(combined) > 20:
                 return combined
 
-    # dict 模式
+    # dict mode
     d = page.get_text("dict")
     if d and "blocks" in d:
         parts = []
@@ -150,20 +150,20 @@ def _extract_text_from_page_fitz(page):
 
 def _pdf_page_worker(args):
     """
-    子进程：提取单个 PDF 页面文字
-    策略：pdfminer.six（中文最强） -> PyMuPDF 多模式 -> OCR
-    返回 (page_num, text, need_ocr)
+    Subprocess worker: extract text from a single PDF page.
+    Strategy: pdfminer.six (best for CJK) -> PyMuPDF multi-mode -> OCR fallback
+    Returns (page_num, text, need_ocr)
     """
     file_path, page_num = args
     try:
         import fitz
 
-        # 策略1：pdfminer.six（对中文 CID 字体支持最强）
+        # Strategy 1: pdfminer.six (strongest CJK CID font support)
         text = _extract_pdfminer_page(file_path, page_num)
         if text and len(text) > 5 and not _is_garbage_text(text):
             return (page_num, text, False)
 
-        # 策略2：PyMuPDF 多模式
+        # Strategy 2: PyMuPDF multi-mode
         doc = fitz.open(file_path)
         page = doc[page_num]
         text = _extract_text_from_page_fitz(page)
@@ -171,7 +171,7 @@ def _pdf_page_worker(args):
         if text and len(text) > 5 and not _is_garbage_text(text):
             return (page_num, text, False)
 
-        # 策略3：OCR兜底（扫描件）
+        # Strategy 3: OCR fallback (scanned pages)
         return (page_num, None, True)
 
     except Exception:
@@ -180,8 +180,8 @@ def _pdf_page_worker(args):
 
 def _ocr_pdf_page_worker(args):
     """
-    对单个 PDF 页面进行 OCR 识别（GPU 加速版）
-    根据检测到的语言选择对应的 OCR 模型
+    OCR a single PDF page (GPU accelerated version).
+    Selects OCR model based on detected language.
 
     args: (file_path, page_num, lang)
     """
@@ -190,16 +190,16 @@ def _ocr_pdf_page_worker(args):
     try:
         import fitz
 
-        # 用 PyMuPDF 把 PDF 页面转成图片
+        # Convert PDF page to image using PyMuPDF
         doc = fitz.open(file_path)
         page = doc[page_num]
-        mat = fitz.Matrix(2, 2)  # 2x2 倍率，提高清晰度
+        mat = fitz.Matrix(2, 2)  # 2x zoom for clarity
         pix = page.get_pixmap(matrix=mat)
         tmp_img = f"_tmp_p{page_num}_{os.getpid()}.png"
         pix.save(tmp_img)
         doc.close()
 
-        # 调用 OCR 服务（使用检测到的语言）
+        # Call OCR service with detected language
         from services.ocr_service import ocr_image
         text = ocr_image(tmp_img, lang=lang)
         return (page_num, text)
@@ -213,16 +213,16 @@ def _ocr_pdf_page_worker(args):
 
 def extract_text_from_pdf(file_path, file_id=None):
     """
-    PDF 提取文字（多进程加速 + 语言自动检测）
-    策略：pdfminer.six 主提取 -> PyMuPDF 补漏 -> 并行 OCR 兜底（扫描件）
-    V2：自动检测文档语言，英文文档使用英文 OCR 模型
+    Extract text from PDF (multiprocess acceleration + auto language detection).
+    Strategy: pdfminer.six primary -> PyMuPDF supplement -> parallel OCR fallback (scanned pages)
+    V2: auto-detect document language, use English OCR model for English documents.
     """
     try:
         import fitz
         from progress_store import set_progress
         from services.ocr_service import detect_language
 
-        # OCR 可用性检查：失败时不阻塞普通文本 PDF 的提取
+        # OCR availability check: don't block regular text PDF extraction if OCR fails
         is_gpu = False
         ocr_available = False
         try:
@@ -238,25 +238,25 @@ def extract_text_from_pdf(file_path, file_id=None):
         if total_pages == 0:
             return ""
 
-        # 先用 pdfminer.six 整体提取
+        # First, full extraction via pdfminer.six
         if file_id is not None:
             set_progress(file_id, 100, 5, "Extracting text...")
         full_text = _extract_pdfminer_full(file_path)
 
-        # 检测文档语言（用于后续 OCR 模型选择）
+        # Detect document language (for subsequent OCR model selection)
         doc_lang = detect_language(full_text) if full_text else "en"
         lang_label = {"en": "English", "ch": "Chinese", "mixed": "Chinese+English"}.get(doc_lang, "English")
         print(f"[Lang] Detected document language: {lang_label} → using '{doc_lang}' OCR model")
 
         if full_text and len(full_text.strip()) > 20 and not _is_garbage_text(full_text):
-            # pdfminer 提取成功且内容质量好，直接使用
+            # pdfminer extraction succeeded with good quality, use directly
             if file_id is not None:
                 set_progress(file_id, 100, 80, "Cleaning data...")
             if file_id is not None:
                 set_progress(file_id, 100, 100, "Parse complete")
             return full_text
 
-        # pdfminer 不够（内容太少或质量差），用多进程逐页提取 + OCR兜底
+        # pdfminer insufficient (too little content or poor quality), use multiprocess per-page extraction + OCR fallback
         max_workers = min(cpu_count(), total_pages, 8)
 
         pages_text = {}
@@ -278,15 +278,15 @@ def extract_text_from_pdf(file_path, file_id=None):
                     pct = int(done_count / total_pages * 50)
                     set_progress(file_id, 100, pct, f"Extracting page {done_count}/{total_pages}")
 
-        # 并行 OCR 无文字页面（扫描件）
-        # GPU 加速：用线程池代替进程池，GPU 共享资源更适合多线程
+        # Parallel OCR for pages with no text (scanned pages)
+        # GPU acceleration: use thread pool instead of process pool, GPU shared resources work better with threads
         if pages_need_ocr and ocr_available:
             ocr_total = len(pages_need_ocr)
             ocr_done = 0
-            # GPU 模式下用更多线程并行 OCR
+            # More parallel OCR threads in GPU mode
             max_ocr_workers = min(cpu_count() * 2, ocr_total, 16) if is_gpu else min(cpu_count(), ocr_total, 8)
             with ThreadPoolExecutor(max_workers=max_ocr_workers) as executor:
-                # 传递检测到的语言到 OCR 工作线程
+                # Pass detected language to OCR worker threads
                 futures = {
                     executor.submit(_ocr_pdf_page_worker, (file_path, p, doc_lang)): p
                     for p in pages_need_ocr
@@ -299,11 +299,11 @@ def extract_text_from_pdf(file_path, file_id=None):
                         pct = 50 + int(ocr_done / ocr_total * 50)
                         set_progress(file_id, 100, pct, f"OCR ({lang_label}) {ocr_done}/{ocr_total} pages")
         elif pages_need_ocr and not ocr_available:
-            # OCR 不可用时，这些页无法识别，保留为空，后续统一给出清晰错误
+            # OCR unavailable, these pages cannot be recognized, leave empty
             for p in pages_need_ocr:
                 pages_text[p] = pages_text.get(p, "")
 
-        # 按顺序拼接
+        # Concatenate in order
         parts = []
         for i in range(total_pages):
             text = pages_text.get(i, "")
@@ -315,7 +315,7 @@ def extract_text_from_pdf(file_path, file_id=None):
             raise Exception("PDF parse failed: OCR dependencies (paddle/paddleocr) are required for this scanned PDF")
 
         if file_id is not None:
-            set_progress(file_id, 100, 100, "解析完成")
+            set_progress(file_id, 100, 100, "Parse complete")
         return result
 
     except Exception as e:
@@ -325,12 +325,12 @@ def extract_text_from_pdf(file_path, file_id=None):
         raise Exception(f"PDF parse failed: {str(e)}")
 
 
-# ========== Word (docx) 提取（保留格式和图片）==========
+# ========== Word (docx) Extraction (preserves formatting and images) ==========
 
 def _extract_run_text(run, paragraph_style):
     """
-    提取单个文本片段（run）的格式化文本
-    返回 Markdown 格式字符串
+    Extract formatted text from a single run element.
+    Returns Markdown-formatted string.
     """
     text = run.text if run.text else ""
     if not text:
@@ -341,7 +341,7 @@ def _extract_run_text(run, paragraph_style):
     underline = getattr(run, "underline", False)
     strike = getattr(run, "strike", False)
 
-    # 加粗 + 斜体组合
+    # Bold + italic combinations
     if bold and italic:
         text = f"***{text}***"
     elif bold:
@@ -356,12 +356,12 @@ def _extract_run_text(run, paragraph_style):
 
 def extract_text_from_docx(file_path, output_base_dir=None):
     """
-    从 Word 文档提取内容，保留标题层级、加粗、斜体、列表、图片
-    图片保存到 outputs 目录，Markdown 中用相对路径引用
+    Extract content from Word document, preserving heading levels, bold, italic, lists, images.
+    Images saved to outputs directory, referenced with relative paths in Markdown.
 
-    参数：
-        file_path: docx 文件路径
-        output_base_dir: 图片保存目录（默认与 docx 同目录的 outputs 下）
+    Args:
+        file_path: docx file path
+        output_base_dir: image save directory (default: outputs/<filename>/images)
     """
     try:
         from docx import Document
@@ -370,18 +370,17 @@ def extract_text_from_docx(file_path, output_base_dir=None):
 
         doc = Document(file_path)
 
-        # 设置图片保存目录
+        # Set image save directory
         if output_base_dir:
             img_dir = output_base_dir
         else:
-            # 提取文件名（不含扩展名）作为图片目录名
             base_name = os.path.splitext(os.path.basename(file_path))[0]
             img_dir = os.path.join(OUTPUT_FOLDER, base_name, "images")
         os.makedirs(img_dir, exist_ok=True)
 
         result_parts = []
 
-        # 提取文档中的图片
+        # Extract embedded images
         extracted_images = {}  # rId -> (saved_filename, full_path)
         for rel in doc.part.rels.values():
             if "image" in rel.target_ref:
@@ -396,9 +395,9 @@ def extract_text_from_docx(file_path, output_base_dir=None):
                         f.write(img_data)
                     extracted_images[rel.rId] = (img_name, img_path.replace("\\", "/"))
                 except Exception as img_err:
-                    print(f"[docx图片提取失败] {img_err}")
+                    print(f"[docx image extraction failed] {img_err}")
 
-        # 提取正文段落
+        # Extract body paragraphs
         for para in doc.paragraphs:
             text = para.text.strip()
             if not text:
@@ -406,26 +405,26 @@ def extract_text_from_docx(file_path, output_base_dir=None):
 
             style_name = para.style.name.lower() if para.style else ""
 
-            # 判断标题级别
-            if "heading 1" in style_name or "标题 1" in style_name:
+            # Detect heading levels
+            if "heading 1" in style_name or "heading1" in style_name:
                 result_parts.append(f"# {text}")
-            elif "heading 2" in style_name or "标题 2" in style_name:
+            elif "heading 2" in style_name or "heading2" in style_name:
                 result_parts.append(f"## {text}")
-            elif "heading 3" in style_name or "标题 3" in style_name:
+            elif "heading 3" in style_name or "heading3" in style_name:
                 result_parts.append(f"### {text}")
-            elif "heading 4" in style_name or "标题 4" in style_name:
+            elif "heading 4" in style_name or "heading4" in style_name:
                 result_parts.append(f"#### {text}")
             elif "title" in style_name:
                 result_parts.append(f"# {text}")
-            # 列表项
-            elif para.style and ("List" in para.style.name or "列表" in para.style.name or "Numbering" in para.style.name):
+            # List items
+            elif para.style and ("List" in para.style.name or "Numbering" in para.style.name):
                 num_pr = para._element.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}numPr')
                 if num_pr is not None:
                     result_parts.append(f"- {text}")
                 else:
                     result_parts.append(f"- {text}")
             else:
-                # 普通段落，遍历每个 run 保留格式
+                # Regular paragraph, iterate runs to preserve formatting
                 runs_text = []
                 for run in para.runs:
                     run_text = run.text if run.text else ""
@@ -448,7 +447,7 @@ def extract_text_from_docx(file_path, output_base_dir=None):
                 if para_text.strip():
                     result_parts.append(para_text)
 
-        # 提取表格
+        # Extract tables
         for table in doc.tables:
             table_rows = []
             for row_idx, row in enumerate(table.rows):
@@ -469,10 +468,10 @@ def extract_text_from_docx(file_path, output_base_dir=None):
         raise Exception(f"Word parse failed: {str(e)}")
 
 
-# ========== Excel 提取 ==========
+# ========== Excel Extraction ==========
 
 def extract_text_from_xlsx(file_path):
-    """Excel 提取，输出 Markdown 表格"""
+    """Excel extraction, output as Markdown tables."""
     try:
         import openpyxl
 
@@ -488,7 +487,7 @@ def extract_text_from_xlsx(file_path):
                     rows_data.append(row_cells)
 
             if rows_data:
-                lines = [f"### 工作表：{sheet_name}\n"]
+                lines = [f"### Sheet: {sheet_name}\n"]
                 for i, row in enumerate(rows_data):
                     if i == 0:
                         lines.append("| " + " | ".join(row) + " |")
@@ -504,10 +503,10 @@ def extract_text_from_xlsx(file_path):
         raise Exception(f"Excel parse failed: {str(e)}")
 
 
-# ========== Markdown 读取 ==========
+# ========== Markdown Read ==========
 
 def extract_text_from_markdown(file_path):
-    """读取 Markdown 文件"""
+    """Read Markdown file content."""
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -515,29 +514,30 @@ def extract_text_from_markdown(file_path):
         raise Exception(f"Markdown file read failed: {str(e)}")
 
 
-# ========== 图片 OCR ==========
+# ========== Image OCR ==========
 
 def extract_text_from_image(file_path, lang="en"):
     """
-    图片 OCR 文字识别
-    参数：
-        file_path: 图片路径
-        lang: OCR 语言模型 — "en"（英文，默认）、"ch"（中文）
+    OCR text recognition for images.
+
+    Args:
+        file_path: image file path
+        lang: OCR language model — "en" (English, default), "ch" (Chinese)
     """
     from services.ocr_service import ocr_image
     return ocr_image(file_path, lang=lang)
 
 
-# ========== 统一入口 ==========
+# ========== Unified Entry Point ==========
 
 def extract_text(file_path, file_ext, file_id=None):
     """
-    根据文件扩展名，自动选择提取方法
+    Auto-select extraction method based on file extension.
 
-    参数：
-        file_path: 文件绝对路径
-        file_ext: 文件扩展名（小写，不带点）
-        file_id: 文件ID，用于进度上报（仅 PDF 支持详细进度）
+    Args:
+        file_path: absolute file path
+        file_ext: file extension (lowercase, without dot)
+        file_id: file ID for progress reporting (PDF only supports detailed progress)
     """
     extractors = {
         "pdf": lambda fp: extract_text_from_pdf(fp, file_id=file_id),
@@ -561,7 +561,7 @@ def extract_text(file_path, file_ext, file_id=None):
 
 
 def _docx_with_progress(file_path, file_id):
-    """docx 带进度上报"""
+    """docx extraction with progress reporting"""
     from progress_store import set_progress
     if file_id is not None:
         set_progress(file_id, 100, 30, "Parsing Word document...")
@@ -572,7 +572,7 @@ def _docx_with_progress(file_path, file_id):
 
 
 def _xlsx_with_progress(file_path, file_id):
-    """xlsx 带进度上报"""
+    """xlsx extraction with progress reporting"""
     from progress_store import set_progress
     if file_id is not None:
         set_progress(file_id, 100, 50, "Parsing Excel...")
@@ -583,7 +583,7 @@ def _xlsx_with_progress(file_path, file_id):
 
 
 def _image_with_progress(file_path, file_id):
-    """图片 OCR 带进度上报（使用配置的默认语言）"""
+    """Image OCR with progress reporting (uses configured default language)"""
     from progress_store import set_progress
     from config import OCR_LANG
     if file_id is not None:

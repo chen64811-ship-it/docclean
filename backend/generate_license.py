@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-DocClean License Key 生成工具
+DocClean License Key Generator
 ==============================
-仅供卖方使用：为客户生成 License Key。
+For seller use only: generate license keys for customers.
 
-用法：
+Usage:
     python generate_license.py --type pro --email "customer@example.com" --expiry 2026-12-31
     python generate_license.py --type enterprise --email "corp@bigbank.com" --expiry 2027-06-30
     python generate_license.py --type pro --email "test@test.com" --expiry 2026-06-30 --count 5
@@ -13,7 +13,7 @@ DocClean License Key 生成工具
 import sys
 import os
 
-# 允许从命令行直接运行
+# Allow running directly from the command line
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from services.license_service import generate_license_key, verify_license_key
@@ -56,14 +56,14 @@ Examples:
 
     for i in range(args.count):
         key = generate_license_key(args.type, args.expiry, args.email)
-        # 验证生成的 Key
+        # Verify the generated key
         verified = verify_license_key(key)
         status = "VALID" if verified else "INVALID"
         print(f"  [{i+1}] [{status}] {key}")
 
     print()
     print("  Send the key to the customer. They activate it at:")
-    print("  Settings → License → Enter Key → Activate")
+    print("  Settings -> License -> Enter Key -> Activate")
     print()
 
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-License 管理路由
-提供 License 激活和状态查询 API
+License Management Routes
+Provides license activation and status query API
 """
 from flask import Blueprint, request, jsonify
 from services.license_service import activate_license, get_license_status, load_license
