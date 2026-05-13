@@ -11,4 +11,4 @@ llm_config.json
 license.json
 *.log
 _tmp_*.png
-*.tmp
+*.tmp_archive/

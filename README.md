@@ -80,14 +80,24 @@ cd docclean
 # 2. Create your config file
 cp .env.example backend/.env
 
-# 3. (Optional) Edit backend/.env to add your LLM API key for AI features
+# 3. (Recommended) Set up authentication
+#    Edit backend/.env and set:
+#      DOCLEAN_USERNAME=admin
+#      DOCLEAN_PASSWORD=your-secure-password
+#    Leave empty for open access (not recommended for production).
+
+# 4. (Optional) Add your LLM API key for AI features
 #    AI Q&A and classification need this. Basic conversion works without it.
 
-# 4. Start the container
+# 5. Start the container
 docker-compose up -d
 
-# 5. Open your browser → http://localhost:5000
+# 6. Open your browser → http://localhost:5000
 ```
+
+#### Production Deployment (HTTPS)
+
+See [deploy/nginx/docclean.conf](deploy/nginx/docclean.conf) for a ready-to-use Nginx + Let's Encrypt configuration.
 
 **For GPU acceleration** (requires NVIDIA GPU + nvidia-container-toolkit):
 
@@ -138,7 +148,12 @@ All settings are in `backend/.env`:
 | `OUTPUT_FOLDER` | `outputs` | Markdown output directory |
 | `MAX_CONTENT_LENGTH` | `52428800` | Max file size in bytes (50 MB) |
 | `ALLOWED_EXTENSIONS` | `pdf,docx,xlsx,png,jpg,...` | Allowed file types |
-| `OCR_USE_GPU` | `true` | Enable GPU for OCR (set `false` for CPU Docker) |
+|| `OCR_USE_GPU` | `true` | Enable GPU for OCR (set `false` for CPU Docker) |
+|| `OCR_LANG` | `en` | OCR language model (`en`, `ch`, or `auto`) |
+|| `OCR_DLL_PATHS` | (empty) | Custom CUDA DLL paths (semicolon-separated, Windows) |
+|| `DOCLEAN_USERNAME` | (empty) | Login username (set to enable authentication) |
+|| `DOCLEAN_PASSWORD` | (empty) | Login password |
+|| `DOCLEAN_LICENSE_SECRET` | (empty) | HMAC secret for license key signing |
 | `LLM_API_KEY` | (empty) | API key for AI Q&A (MiniMax, OpenAI, Ollama compatible) |
 | `LLM_API_BASE` | `https://api.minimax.chat/v1` | LLM API endpoint (OpenAI-compatible) |
 | `LLM_MODEL` | `MiniMax-M2.7` | Model name |
