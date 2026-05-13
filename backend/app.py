@@ -19,6 +19,7 @@ from routes.upload_routes import upload_bp
 from routes.knowledge_routes import knowledge_bp
 from routes.book_routes import book_bp
 from routes.license_routes import license_bp
+from routes.lemon_routes import lemon_bp
 
 # ========== Authentication ==========
 AUTH_USERNAME = os.environ.get("DOCLEAN_USERNAME", "")
@@ -138,6 +139,7 @@ def create_app():
     app.register_blueprint(knowledge_bp)
     app.register_blueprint(book_bp)
     app.register_blueprint(license_bp)
+    app.register_blueprint(lemon_bp)
 
     # ── Auth endpoints ──
 
@@ -255,7 +257,7 @@ def create_app():
             return None
         if request.path.startswith("/api/"):
             # Public endpoints (login, auth-check)
-            if request.path in ("/api/login", "/api/auth-check"):
+            if request.path in ("/api/login", "/api/auth-check", "/api/lemon/webhook"):
                 return None
             if not _is_authenticated():
                 return _api_json_error("Authentication required", 401)
