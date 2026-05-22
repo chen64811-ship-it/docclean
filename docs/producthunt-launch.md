@@ -7,32 +7,27 @@
 
 ## 1. Tagline
 
-> 60 characters max. Must be catchy and instantly communicate the value prop.
+> 优化原则：一个核心承诺，不堆功能点。
 
-**Primary (57 chars):**
+**Primary (40 chars):**
 ```
-Your documents never leave your machine. PDF, Word, Excel → Markdown.
+Convert documents to Markdown. 100% local.
 ```
 
-**Backup (51 chars):**
+**Backup (55 chars):**
 ```
-Self-hosted doc to Markdown converter with GPU OCR. Zero cloud.
+Your documents never leave your machine. Drag, drop, done.
 ```
 
 ---
 
 ## 2. Short Description
 
-> 260 characters max. This appears under the tagline on the Product Hunt card. Must hook the reader.
+> 优化原则：最短演示路径 — 用户看完就知道怎么上手。
 
-**Primary (259 chars):**
+**Primary (209 chars):**
 ```
-Convert PDF, Word, Excel, and images into clean Markdown — 100% on your own hardware. GPU-accelerated OCR. Built-in editor. RAG knowledge base. Book compiler. No cloud uploads. No subscriptions required. One docker-compose up and you're done.
-```
-
-**Backup (253 chars):**
-```
-Privacy-first document converter that runs entirely on your machine. PDF/Word/Excel/Images → clean editable Markdown. GPU-accelerated PaddleOCR. AI knowledge base with RAG. Book compiler. Docker. Self-hosted. MIT license. Your data never leaves your server.
+docker-compose up → drag in any PDF, Word, Excel, or image → get clean Markdown. All on your machine. GPU-accelerated OCR. Built-in editor. Zero cloud. MIT licensed. Free to use.
 ```
 
 ---
@@ -45,58 +40,65 @@ Privacy-first document converter that runs entirely on your machine. PDF/Word/Ex
 
 ### What is DocClean?
 
-DocClean is a **self-hosted document intelligence tool** that converts PDF, Word, Excel, and images into clean, editable Markdown. Everything runs locally on your machine — your documents never touch a third-party server.
+**DocClean turns documents into Markdown. On your machine. That's it.**
 
-**The thesis is simple:** cloud document converters are a privacy nightmare. Mathpix, Docparser, Smallpdf, Zamzar — every one of them processes your files on their servers. For lawyers handling client contracts, doctors working with patient records, bankers reviewing financial statements, or researchers with unpublished data, that's a complete non-starter. You simply cannot upload sensitive documents to a random API.
+Every other converter (Mathpix, Smallpdf, Zamzar) makes you upload files to their cloud first. If you handle contracts, medical records, financial reports, or unpublished research — that's a dealbreaker. DocClean runs on your hardware. Your data never leaves.
 
-DocClean solves this. One command, and you have a full document processing pipeline running on your own hardware.
-
----
-
-### Core Capabilities
-
-**6-in-1 Conversion Pipeline**
-Drag and drop PDFs (digital + scanned), Word docs, Excel spreadsheets, images (PNG/JPG/BMP/WebP/GIF), Markdown, and plain text. DocClean extracts, cleans, and converts everything to well-structured Markdown.
-
-**GPU-Accelerated OCR**
-Powered by PaddleOCR — Baidu's production-grade OCR engine — with NVIDIA CUDA support. Extracts text from scanned documents and images with industry-leading accuracy, especially for multilingual (Chinese + English) content. 3-5x faster on GPU. CPU fallback works out of the box if you don't have one.
-
-**Built-in Markdown Editor**
-Edit your converted documents directly in the browser with EasyMDE. Live preview as you type. Export back to PDF with Chinese font support. No need to switch between tools.
-
-**AI Knowledge Base (RAG + LLM Q&A)**
-DocClean indexes your converted documents with TF-IDF, builds a searchable knowledge base, and lets you ask natural language questions about your documents. Connect any OpenAI-compatible API (MiniMax, OpenAI, Ollama, anything) and query your documents like a database.
-
-**Book Compiler**
-Upload a Word outline, and DocClean auto-matches your converted Markdown files to compile them into a structured book. Rearrange chapters with a Notion-style drag-and-drop block editor. One click to export the entire book as a single Markdown file.
-
-**API-First Design**
-Every feature is accessible via REST API. Swagger/OpenAPI docs at `/api/docs/`. Integrate DocClean into your existing workflows, CI/CD pipelines, or build custom frontends on top of it.
+**Shortest path from zero to working:**
+```bash
+docker-compose up
+# Drag a PDF into the browser. Get Markdown back.
+```
 
 ---
 
-### Why Privacy Matters (Now More Than Ever)
+### Why Pay for Pro When the Core Is Free?
 
-Every time you upload a document to a cloud converter, you're handing your data to a company whose privacy policy you probably haven't read. Many of these services reserve the right to use your content for model training, analytics, or worse — and their terms change without notice.
+> **Free = you convert documents. Pro = you build a searchable knowledge base from them.**
 
-DocClean is different. The core conversion pipeline makes **zero outbound network calls**. The only optional external API is the LLM integration for AI Q&A, which you control completely. Everything else runs inside your Docker container, on your machine, behind your firewall.
+The free Community edition does the job: convert, edit, export. If you need to ask questions across hundreds of documents, search by keyword, or compile a book from an outline — that's what Pro unlocks.
 
 ---
 
-### Technical Highlights
+### What You Can Do
 
-- **Language-adaptive OCR**: Auto-detects CJK vs Latin scripts and switches PaddleOCR models automatically. Works for English, Chinese, and 80+ other languages.
-- **Smart garbage filtering**: Language-agnostic text cleaning that removes gibberish without destroying legitimate content — not hardcoded for any single language.
-- **Real-time progress**: Live polling at 500ms intervals during document parsing, with accurate percentage tracking.
-- **67 unit tests**, GitHub Actions CI across Windows and Linux, Python 3.10/3.11.
-- **MIT licensed** free tier. Commercial tiers available for advanced features.
+**Drop in any file, get clean Markdown.**
+PDFs (even scanned ones), Word, Excel, images — DocClean pulls the text out and cleans it up. No settings to configure. Drag, wait a few seconds, done.
+
+**Edit and export right in the browser.**
+Built-in Markdown editor with live preview. Fix formatting, adjust structure, then export to PDF or download as a single file.
+
+**Search your documents like a database.**
+Pro tier: DocClean indexes everything you've converted. Search by keyword, or ask questions in plain English ("What was Q3 revenue?") and get answers pulled from your files.
+
+**Compile a book from an outline.**
+Drop a Word document with chapter headings, and DocClean auto-matches your converted files to build a structured book. Drag chapters to reorder, edit inline, export as one Markdown file.
+
+**Works with your existing tools.**
+REST API for everything. Swagger docs at `/api/docs/`. Integrate into your CI/CD pipeline or build a custom frontend.
+
+---
+
+### Why Privacy Matters
+
+Every cloud converter you upload to is a company that can read your documents. Their privacy policies change. Their servers get breached. For anyone handling sensitive information, that risk is unacceptable.
+
+DocClean makes **zero outbound calls** during conversion. The only optional internet access is the AI Q&A feature, which you connect to your own API key. Everything else runs inside your Docker container, behind your firewall.
+
+---
+
+### Under the Hood (for the curious)
+
+- OCR auto-detects language (English, Chinese, Japanese, Korean, 80+ others) and switches models automatically. GPU makes it 3-5x faster.
+- Smart text cleaning that removes garbage without destroying real content — works for any language, not hardcoded for English.
+- 67 unit tests, CI on Windows + Linux, Python 3.10/3.11.
 
 ---
 
 ### Getting Started
 
 ```bash
-git clone https://github.com/yourusername/docclean.git
+git clone https://github.com/chen64811-ship-it/docclean.git
 cd docclean
 docker-compose up -d
 # Open http://localhost:5000
@@ -120,11 +122,13 @@ If you want GPU acceleration, swap to `Dockerfile.gpu` in the compose file, unco
 
 ### Pricing
 
+> **The free version does the job. Pro turns your document folder into something you can ask questions to.**
+
 | Tier | Price | What You Get |
 |------|-------|---------------|
 | **Community** | Free (MIT) | PDF/Image OCR, Word/Excel/MD conversion, Markdown editor, PDF export |
-| **Pro** | $49/mo or $199/yr | Everything in Community + RAG knowledge base, AI Q&A, batch processing |
-| **Enterprise** | $999/yr | Everything in Pro + source code, private deployment support, SLA |
+| **Pro** | $49/mo or $199/yr | Everything in Community + search across all documents + ask questions in plain English + batch processing |
+| **Enterprise** | $999/yr | Everything in Pro + full source code + private deployment help + SLA |
 
 [Get Started Free →](#) &nbsp;&nbsp; [Buy Pro →](#) &nbsp;&nbsp; [Contact Sales →](#)
 
@@ -176,7 +180,7 @@ I'll be here all day answering questions. Fire away — harsh feedback very welc
 
 **Quick try:**
 ```bash
-git clone https://github.com/yourusername/docclean
+git clone https://github.com/chen64811-ship-it/docclean
 docker-compose up
 # Open http://localhost:5000
 ```

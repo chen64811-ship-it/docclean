@@ -248,6 +248,19 @@ def create_app():
         response.headers["Expires"] = "0"
         return response
 
+    # ── Public demo page (no auth required) ──
+    @app.route("/demo")
+    def demo():
+        """
+        Serve the interactive Product Hunt demo page.
+        Public — no authentication required.
+        """
+        demo_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "frontend", "demo-interactive.html"
+        )
+        return send_from_directory(os.path.dirname(demo_path), "demo-interactive.html")
+
     # ── Auth-protect all API routes ──
     @app.before_request
     def protect_api():

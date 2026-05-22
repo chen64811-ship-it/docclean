@@ -7,6 +7,8 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR-orange)](https://github.com/PaddlePaddle/PaddleOCR)
 
+![DocClean Demo](docs/demo.gif)
+
 Convert PDF, Word, Excel, images, and Markdown files into clean, editable Markdown — entirely on your own machine. No cloud uploads. No data leaks. No subscriptions required.
 
 ---

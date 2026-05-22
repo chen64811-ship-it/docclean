@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocClean — Interactive Product Demo</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-dim: #484f58;
+  --blue: #58a6ff;
+  --blue-bg: rgba(88,166,255,0.12);
+  --green: #3fb950;
+  --green-bg: rgba(63,185,80,0.12);
+  --orange: #f0883e;
+  --purple: #a371f7;
+  --radius: 8px;
+  --shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  overflow-x:hidden
+}
+
+/* === Top Bar === */
+.topbar{
+  width:100%;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:14px 24px;display:flex;align-items:center;gap:12px;
+  position:sticky;top:0;z-index:100
+}
+.topbar .logo{font-size:1.1rem;font-weight:700;color:var(--blue)}
+.topbar .tag{font-size:0.68rem;padding:3px 10px;border-radius:12px;background:var(--blue-bg);color:var(--blue)}
+.topbar .step-indicator{flex:1;display:flex;justify-content:center;gap:6px}
+.topbar .step-indicator .dot{
+  width:8px;height:8px;border-radius:50%;background:var(--border);
+  transition:all 0.4s
+}
+.topbar .step-indicator .dot.done{background:var(--green)}
+.topbar .step-indicator .dot.active{background:var(--blue);box-shadow:0 0 8px rgba(88,166,255,0.5)}
+
+/* === Main Content === */
+.main{width:100%;max-width:900px;padding:40px 24px 100px}
+
+/* === Step Panels === */
+.step{display:none;animation:fadeIn 0.4s ease}
+.step.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+.step h2{font-size:1.5rem;margin-bottom:8px;color:#fff}
+.step .subtitle{font-size:0.9rem;color:var(--text-muted);margin-bottom:24px}
+
+/* === Drop Zone === */
+.dropzone{
+  border:2px dashed var(--border);border-radius:16px;
+  padding:50px;text-align:center;cursor:pointer;
+  transition:all 0.3s;background:var(--surface)
+}
+.dropzone:hover{border-color:var(--blue);background:rgba(88,166,255,0.03)}
+.dropzone.active{border-color:var(--green);background:rgba(63,185,80,0.04)}
+.dropzone .icon{font-size:3rem;margin-bottom:12px}
+.dropzone h3{font-size:1rem;margin-bottom:6px}
+.dropzone p{font-size:0.82rem;color:var(--text-muted)}
+
+/* === File List === */
+.file-list{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.file-item{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 16px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:0.85rem
+}
+.file-item .icon{font-size:1.2rem}
+.file-item .name{flex:1}
+.file-item .size{font-size:0.72rem;color:var(--text-dim)}
+.file-item .status{font-size:0.72rem;padding:3px 10px;border-radius:10px;font-weight:500}
+.file-item .status.processing{color:var(--blue);background:var(--blue-bg)}
+.file-item .status.done{color:var(--green);background:var(--green-bg)}
+.progress-wrap{width:100%;height:3px;background:#21262d;border-radius:2px;margin-top:8px;overflow:hidden}
+.progress-bar{height:100%;background:var(--blue);transition:width 0.5s}
+
+/* === Preview === */
+.preview{
+  background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  padding:24px;margin-top:20px;font-size:0.84rem;line-height:1.8;
+  max-height:400px;overflow-y:auto
+}
+.preview h3{color:var(--blue);margin-bottom:12px}
+.md-h1{color:var(--orange);font-size:1.1rem;font-weight:700}
+.md-bold{color:#ffa657;font-weight:700}
+.md-list{color:#79c0ff}
+
+/* === Feature Grid === */
+.feature-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:12px;margin-top:20px
+}
+.feature-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;text-align:center;transition:all 0.2s
+}
+.feature-card:hover{background:rgba(88,166,255,0.04);border-color:#484f58}
+.feature-card .ficon{font-size:1.6rem;margin-bottom:8px}
+.feature-card h4{font-size:0.85rem;margin-bottom:4px;color:#fff}
+.feature-card p{font-size:0.75rem;color:var(--text-muted);line-height:1.5}
+
+/* === CTA === */
+.cta-section{
+  text-align:center;padding:20px 0
+}
+.cta-section h2{font-size:1.6rem;margin-bottom:8px}
+.cta-btn{
+  display:inline-block;padding:12px 32px;background:var(--blue);color:#0d1117;
+  border-radius:10px;font-weight:700;font-size:0.95rem;
+  text-decoration:none;transition:all 0.2s;margin-top:16px
+}
+.cta-btn:hover{background:#79b8ff;transform:translateY(-1px);box-shadow:0 4px 12px rgba(88,166,255,0.3)}
+
+/* === Nav Buttons === */
+.nav-row{display:flex;justify-content:center;gap:12px;margin-top:32px}
+.nav-btn{
+  padding:10px 28px;border-radius:var(--radius);font-size:0.88rem;font-weight:600;
+  cursor:pointer;border:none;font-family:inherit;transition:all 0.15s
+}
+.nav-btn.primary{background:var(--blue);color:#0d1117}
+.nav-btn.primary:hover{background:#79b8ff}
+.nav-btn.ghost{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.nav-btn.ghost:hover{background:var(--surface);color:var(--text)}
+
+/* === Tooltip === */
+.tooltip{
+  position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--blue);
+  padding:10px 24px;border-radius:20px;font-size:0.82rem;
+  color:#fff;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:200
+}
+.tooltip.show{opacity:1}
+
+/* === Responsive === */
+@media(max-width:600px){
+  .main{padding:24px 16px}
+  .dropzone{padding:30px}
+  .feature-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="logo">🧹 DocClean</div>
+  <div class="tag">Product Demo</div>
+  <div class="step-indicator" id="stepper">
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+  <div style="font-size:0.75rem;color:var(--text-dim)">docclean.app</div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Main Content -->
+<div class="main" id="main">
+
+  <!-- Step 1: Welcome -->
+  <div class="step active" data-step="0">
+    <h2>Turn any document into clean Markdown</h2>
+    <p class="subtitle">PDFs, Word files, Excel sheets, scanned images — all processed locally on your machine. No cloud. No tracking.</p>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="ficon">🔒</div><h4>100% Local</h4><p>Your files never leave your computer</p></div>
+      <div class="feature-card"><div class="ficon">⚡</div><h4>GPU Accelerated</h4><p>10x faster OCR with NVIDIA GPU</p></div>
+      <div class="feature-card"><div class="ficon">📄</div><h4>Any Format</h4><p>PDF, DOCX, XLSX, PNG, JPG, MD</p></div>
+      <div class="feature-card"><div class="ficon">📝</div><h4>Markdown Export</h4><p>Clean, editable, AI-ready output</p></div>
+    </div>
+    <div class="nav-row">
+      <button class="nav-btn primary" onclick="goTo(1)">Try it →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Upload -->
+  <div class="step" data-step="1">
+    <h2>Drop a file or click to upload</h2>
+    <p class="subtitle">Drag a PDF, Word doc, spreadsheet, or image onto the zone below.</p>
+    <div class="dropzone" id="dropzone" onclick="simulateUpload()">
+      <div class="icon" id="dropIcon">📁</div>
+      <h3 id="dropTitle">Drop files here or click to browse</h3>
+      <p id="dropHint">PDF · Word · Excel · Images — up to 50MB</p>
+    </div>
+    <div class="file-list" id="fileList"></div>
+    <div class="nav-row" id="step2nav" style="display:none">
+      <button class="nav-btn ghost" onclick="goTo(0)">← Back</button>
+      <button class="nav-btn primary" onclick="goTo(2)">See the result →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Processing & OCR -->
+  <div class="step" data-step="2">
+    <h2>OCR extracts every word — even from scans</h2>
+    <p class="subtitle">DocClean uses PaddleOCR with GPU acceleration to pull text from scanned PDFs, handwritten notes, and images.</p>
+    <div class="preview">
+      <h3>📝 contract-2024.md — extracted in 3.5s</h3>
+      <br>
+      <span class="md-h1"># Service Agreement</span><br><br>
+      This agreement is made on <span class="md-bold">January 15, 2024</span><br>
+      between <span class="md-bold">Acme Corp</span> and <span class="md-bold">Client Inc.</span><br><br>
+      <span class="md-h1">## Terms</span><br><br>
+      <span class="md-list">1.</span> Service scope: Cloud infrastructure management<br>
+      <span class="md-list">2.</span> Duration: <span class="md-bold">12 months</span> from effective date<br>
+      <span class="md-list">3.</span> Payment: <span class="md-bold">$4,500/month</span>, net 30<br><br>
+      <span class="md-h1">## Termination</span><br><br>
+      Either party may terminate with <span class="md-bold">30 days</span> written notice.<br>
+      All text preserved <span class="md-bold">100% accurately</span> from the original PDF.
+    </div>
+    <div class="nav-row">
+      <button class="nav-btn ghost" onclick="goTo(1)">← Back</button>
+      <button class="nav-btn primary" onclick="goTo(3)">What about privacy? →</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Privacy -->
+  <div class="step" data-step="3">
+    <h2>Your data. Your machine. Your rules.</h2>
+    <p class="subtitle">Unlike cloud-based tools, DocClean processes everything locally. Nothing gets uploaded — ever.</p>
+    <div class="feature-grid">
+      <div class="feature-card"><div class="ficon">🏠</div><h4>Runs on Your Hardware</h4><p>No cloud dependency, no internet required after install</p></div>
+      <div class="feature-card"><div class="ficon">🚫</div><h4>No Account Needed</h4><p>No sign-ups, no email collection, no usage tracking</p></div>
+      <div class="feature-card"><div class="ficon">🤖</div><h4>No AI Training</h4><p>Your documents are never used to train models</p></div>
+      <div class="feature-card"><div class="ficon">🗑️</div><h4>You Control the Data</h4><p>Delete files anytime — they only live on your disk</p></div>
+    </div>
+    <div class="nav-row">
+      <button class="nav-btn ghost" onclick="goTo(2)">← Back</button>
+      <button class="nav-btn primary" onclick="goTo(4)">Get started →</button>
+    </div>
+  </div>
+
+  <!-- Step 5: CTA -->
+  <div class="step" data-step="4">
+    <div class="cta-section">
+      <h2>Ready to clean your documents?</h2>
+      <p class="subtitle">Open source. MIT licensed. Self-hostable. Docker-ready.</p>
+      <div style="margin:24px 0;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+        <a href="https://github.com/chen64811-ship-it/docclean" class="cta-btn" target="_blank">
+          ⭐ Star on GitHub
+        </a>
+        <a href="https://docclean.app" class="cta-btn" style="background:var(--green)" target="_blank">
+          → Try DocClean Live
+        </a>
+      </div>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-top:20px">
+        Docker: <code style="background:#21262d;padding:2px 8px;border-radius:4px">docker pull docclean</code>
+        &nbsp;·&nbsp; MIT License &nbsp;·&nbsp; <a href="https://github.com/chen64811-ship-it/docclean" style="color:var(--blue)" target="_blank">github.com/chen64811-ship-it/docclean</a>
+      </p>
+    </div>
+    <div class="nav-row">
+      <button class="nav-btn ghost" onclick="goTo(3)">← Back</button>
+      <button class="nav-btn ghost" onclick="restart()">↺ Restart demo</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// === DEMO ENGINE ===
+
+const MOCK_FILES = [
+  { name: 'contract-2024.pdf', size: '4.2 MB', type: '📄', duration: 1800 },
+  { name: 'quarterly-data.xlsx', size: '856 KB', type: '📊', duration: 1200 },
+  { name: 'handwritten-note.jpg', size: '3.1 MB', type: '🖼️', duration: 2500 },
+];
+
+let currentStep = 0;
+let fileIdx = 0;
+const STEPS = 5;
+
+function updateStepper() {
+  document.querySelectorAll('#stepper .dot').forEach((d, i) => {
+    d.className = 'dot';
+    if (i < currentStep) d.classList.add('done');
+    if (i === currentStep) d.classList.add('active');
+  });
+}
+
+function goTo(step) {
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+  document.querySelector(`.step[data-step="${step}"]`).classList.add('active');
+  currentStep = step;
+  updateStepper();
+  document.getElementById('main').scrollIntoView({ behavior: 'smooth' });
+}
+
+function restart() {
+  // Reset file list
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('step2nav').style.display = 'none';
+  document.getElementById('dropzone').classList.remove('active');
+  document.getElementById('dropIcon').textContent = '📁';
+  document.getElementById('dropTitle').textContent = 'Drop files here or click to browse';
+  document.getElementById('dropHint').textContent = 'PDF · Word · Excel · Images — up to 50MB';
+  fileIdx = 0;
+  goTo(0);
+}
+
+async function simulateUpload() {
+  if (fileIdx >= MOCK_FILES.length) {
+    showTooltip('All sample files have been processed! Continue to see the results.');
+    return;
+  }
+
+  const dz = document.getElementById('dropzone');
+  const f = MOCK_FILES[fileIdx++];
+
+  // Flash dropzone
+  dz.classList.add('active');
+  document.getElementById('dropIcon').textContent = '⬇️';
+  document.getElementById('dropTitle').textContent = 'Processing...';
+  document.getElementById('dropHint').textContent = 'GPU-powered OCR extraction in progress';
+
+  // Add file item with progress bar
+  const i = fileIdx - 1;
+  const div = document.createElement('div');
+  div.className = 'file-item';
+  div.id = `file-${i}`;
+  div.innerHTML = `
+    <span class="icon">${f.type}</span>
+    <span class="name">${f.name}</span>
+    <span class="size">${f.size}</span>
+    <span class="status processing" id="status-${i}">parsing</span>
+    <div class="progress-wrap"><div class="progress-bar" id="bar-${i}"></div></div>
+  `;
+  document.getElementById('fileList').appendChild(div);
+
+  // Animate progress
+  const bar = document.getElementById(`bar-${i}`);
+  const status = document.getElementById(`status-${i}`);
+  const steps = 40;
+  const delay = f.duration / steps;
+
+  for (let s = 1; s <= steps; s++) {
+    await new Promise(r => setTimeout(r, delay));
+    bar.style.width = (s * 100 / steps) + '%';
+  }
+
+  // Mark done
+  status.textContent = 'done';
+  status.className = 'status done';
+  bar.style.background = 'var(--green)';
+
+  // Reset dropzone
+  dz.classList.remove('active');
+  document.getElementById('dropIcon').textContent = '📁';
+  document.getElementById('dropTitle').textContent = `${f.name} converted! Drop another file or continue.`;
+  document.getElementById('dropHint').textContent = 'PDF · Word · Excel · Images — up to 50MB';
+
+  // Show nav after first file
+  document.getElementById('step2nav').style.display = 'flex';
+
+  showTooltip(`✅ ${f.name} → Markdown in ${(f.duration/1000).toFixed(1)}s (GPU accelerated)`);
+}
+
+function showTooltip(msg) {
+  const el = document.getElementById('tooltip');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (currentStep < STEPS - 1) goTo(currentStep + 1);
+  }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (currentStep > 0) goTo(currentStep - 1);
+  }
+});
+
+// Initial state
+updateStepper();
+</script>
+</body>
+</html>
