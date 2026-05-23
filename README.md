@@ -5,6 +5,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-supported-brightgreen)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Product Hunt](https://img.shields.io/badge/Product_Hunt-Upcoming-ff6154?logo=producthunt&logoColor=white)](https://www.producthunt.com/products/docclean)
 [![PaddleOCR](https://img.shields.io/badge/OCR-PaddleOCR-orange)](https://github.com/PaddlePaddle/PaddleOCR)
 
 ![DocClean Demo](docs/demo.gif)
