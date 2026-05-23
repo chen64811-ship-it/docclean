@@ -11,6 +11,8 @@
 
 Convert PDF, Word, Excel, images, and Markdown files into clean, editable Markdown — entirely on your own machine. No cloud uploads. No data leaks. No subscriptions required.
 
+**[⚡ Get Pro $49/mo](https://chenster376.gumroad.com/l/docclean-pro) &nbsp;|&nbsp; [🏢 Enterprise $999/yr](https://chenster376.gumroad.com/l/docclean-enterprise) &nbsp;|&nbsp; [📺 Demo Video](https://youtu.be/6EEk46luQJw)**
+
 ---
 
 ## Why DocClean?

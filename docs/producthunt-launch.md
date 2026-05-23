@@ -130,7 +130,7 @@ If you want GPU acceleration, swap to `Dockerfile.gpu` in the compose file, unco
 | **Pro** | $49/mo or $199/yr | Everything in Community + search across all documents + ask questions in plain English + batch processing |
 | **Enterprise** | $999/yr | Everything in Pro + full source code + private deployment help + SLA |
 
-[Get Started Free →](#) &nbsp;&nbsp; [Buy Pro →](#) &nbsp;&nbsp; [Contact Sales →](#)
+[Get Started Free →](https://github.com/chen64811-ship-it/docclean) &nbsp;&nbsp; [Buy Pro →](https://chenster376.gumroad.com/l/docclean-pro) &nbsp;&nbsp; [Contact Sales →](mailto:chenxingyu@foxmail.com)
 
 ---
 
